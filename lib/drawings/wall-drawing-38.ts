@@ -7,6 +7,7 @@ export const wallDrawing38: DrawingInstruction = {
     'Tissue paper cut into 1½-inch (4 cm) squares and inserted into holes in the gray pegboard walls. All holes in the walls are filled randomly.',
   year: 1970,
   medium: 'Colored tissue papers, gray pegboard walls',
+  backgroundColor: '#b0b0b0',
   steps: [
     {
       type: 'pegboard',

@@ -11,8 +11,8 @@ export const wallDrawing46: DrawingInstruction = {
       type: 'wobbly-lines',
       params: {
         direction: 'vertical',
-        count: { min: 40, max: 80 },
-        wobble: { min: 3, max: 12 },
+        count: { min: 60, max: 80 },
+        wobble: { min: 3, max: 8 },
         segments: { min: 20, max: 40 },
         strokeWidth: { min: 0.5, max: 1.5 },
       },

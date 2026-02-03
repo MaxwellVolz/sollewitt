@@ -12,6 +12,7 @@ export interface DrawingInstruction {
   description: string
   year?: number
   medium?: string
+  backgroundColor?: string
   steps: DrawingStep[]
 }
 

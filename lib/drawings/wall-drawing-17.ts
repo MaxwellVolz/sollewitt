@@ -9,7 +9,7 @@ export const wallDrawing17: DrawingInstruction = {
   steps: [
     {
       type: 'divide',
-      params: { rows: 2, cols: 2 },
+      params: { rows: 1, cols: 4 },
     },
     {
       type: 'lines',

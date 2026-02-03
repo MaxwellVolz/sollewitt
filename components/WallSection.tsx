@@ -84,10 +84,13 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
   }, [instruction.id, seed])
 
   return (
-    <section className="wall-section">
-      <span className="instruction-label">
-        {instruction.title} ({instruction.year})
-      </span>
+    <section className="wall-section" style={instruction.backgroundColor ? { backgroundColor: instruction.backgroundColor } : undefined}>
+      <div className="instruction-header">
+        <span className="instruction-label">
+          {instruction.title} ({instruction.year})
+        </span>
+        <span className="instruction-subtitle">{instruction.description}</span>
+      </div>
       <DrawingCanvas ref={canvasHandle} instruction={instruction} seed={seed} progressRef={progressRef} />
       <Controls isPlaying={isPlaying} onPlay={play} onStop={stop} onReroll={handleReroll} onDownload={handleDownload} />
       <Timeline ref={timelineBarRef} progress={timelineProgress} onSeek={handleSeek} />
