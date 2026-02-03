@@ -128,6 +128,52 @@ main {
   line-height: 1.4;
 }
 
+/* About/Footer section */
+.about-section {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fg);
+  color: var(--bg);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  padding: 2rem;
+}
+
+.about-content {
+  max-width: 480px;
+  text-align: center;
+}
+
+.about-content h2 {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  opacity: 0.6;
+}
+
+.about-content p {
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.about-content a {
+  color: var(--bg);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.about-content a:hover {
+  opacity: 1;
+}
+
 /* Mobile layout */
 @media (max-width: 640px) {
   .controls {
@@ -150,5 +196,9 @@ main {
   .instruction-subtitle {
     font-size: 0.65rem;
     max-width: none;
+  }
+
+  .about-content p {
+    font-size: 1rem;
   }
 }

@@ -117,17 +117,23 @@ function handleDivideAndLines(
   const pick = (linesStep.params.pickPerCell as number) || 3
   const density = linesStep.params.density as { min: number; max: number }
   const unique = linesStep.params.unique as boolean | undefined
+  const progressive = linesStep.params.progressive as boolean | undefined
 
   // For unique mode (#17), shuffle all kinds and assign one per cell without repeats
-  const shuffledKinds = unique ? shuffle(allKinds, rand) : null
-  let kindIndex = 0
+  const shuffledKinds = unique || progressive ? shuffle(allKinds, rand) : null
+  let cellIndex = 0
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       let cellKinds: LineKind[]
-      if (shuffledKinds) {
-        cellKinds = [shuffledKinds[kindIndex % shuffledKinds.length]]
-        kindIndex++
+      if (progressive) {
+        // Progressive mode (#56): cell 0 gets 1 kind, cell 1 gets 2, etc.
+        const numKinds = Math.min(cellIndex + 1, shuffledKinds!.length)
+        cellKinds = shuffledKinds!.slice(0, numKinds)
+        cellIndex++
+      } else if (shuffledKinds) {
+        cellKinds = [shuffledKinds[cellIndex % shuffledKinds.length]]
+        cellIndex++
       } else {
         cellKinds = shuffle(allKinds, rand).slice(0, pick)
       }
@@ -297,6 +303,70 @@ function handleWobblyLines(
   }
 }
 
+function getCombinations<T>(arr: T[], k: number): T[][] {
+  if (k === 0) return [[]]
+  if (arr.length < k) return []
+  const [first, ...rest] = arr
+  const withFirst = getCombinations(rest, k - 1).map((c) => [first, ...c])
+  const withoutFirst = getCombinations(rest, k)
+  return [...withFirst, ...withoutFirst]
+}
+
+function handleCombinatorial(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'combinatorial')
+  if (!step) return
+
+  const allKinds = (step.params.lineKinds as LineKind[]) || []
+  const density = step.params.density as { min: number; max: number }
+
+  // Generate all combinations: singles, pairs, triples, quadruple
+  const singles = getCombinations(allKinds, 1) // 4 combinations
+  const pairs = getCombinations(allKinds, 2) // 6 combinations
+  const triples = getCombinations(allKinds, 3) // 4 combinations
+  const quadruple = getCombinations(allKinds, 4) // 1 combination
+
+  // Row layout: [4 cells, 6 cells, 4 cells, 1 cell]
+  const rows = [
+    { combinations: shuffle(singles, rand), cols: 4 },
+    { combinations: shuffle(pairs, rand), cols: 6 },
+    { combinations: shuffle(triples, rand), cols: 4 },
+    { combinations: quadruple, cols: 1 },
+  ]
+
+  const totalRows = rows.length
+  const rowHeight = h / totalRows
+
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r]
+    const y = r * rowHeight
+    const cellW = w / row.cols
+
+    for (let c = 0; c < row.cols; c++) {
+      const x = c * cellW
+      const cellKinds = row.combinations[c] || []
+
+      for (const kind of cellKinds) {
+        const count = Math.floor(randRange(rand, density))
+        const lines = generateLinesForCell(kind, x, y, cellW, rowHeight, count)
+
+        for (const path of lines) {
+          pushStroke(strokes, path, {
+            color: '#222',
+            width: 0.5 + rand() * 1,
+            opacity: 0.4 + rand() * 0.4,
+          })
+        }
+      }
+    }
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -324,6 +394,10 @@ export function generateStrokes(
 
   if (stepTypes.has('wobbly-lines')) {
     handleWobblyLines(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('combinatorial')) {
+    handleCombinatorial(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes

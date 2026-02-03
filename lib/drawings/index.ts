@@ -6,6 +6,8 @@ import { wallDrawing19 } from './wall-drawing-19'
 import { wallDrawing38 } from './wall-drawing-38'
 import { wallDrawing46 } from './wall-drawing-46'
 import { wallDrawing47 } from './wall-drawing-47'
+import { wallDrawing56 } from './wall-drawing-56'
+import { wallDrawing85 } from './wall-drawing-85'
 
 export const drawings: DrawingInstruction[] = [
   wallDrawing11,
@@ -15,4 +17,6 @@ export const drawings: DrawingInstruction[] = [
   wallDrawing38,
   wallDrawing46,
   wallDrawing47,
+  wallDrawing56,
+  wallDrawing85,
 ]

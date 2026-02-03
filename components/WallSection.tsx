@@ -78,13 +78,26 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
     const buffer = canvasHandle.current?.getCanvas()
     if (!buffer) return
 
+    // Create a composite canvas with background + strokes
+    const composite = document.createElement('canvas')
+    composite.width = buffer.width
+    composite.height = buffer.height
+    const ctx = composite.getContext('2d')!
+
+    // Fill background
+    ctx.fillStyle = instruction.backgroundColor || '#ffffff'
+    ctx.fillRect(0, 0, composite.width, composite.height)
+
+    // Draw strokes on top
+    ctx.drawImage(buffer, 0, 0)
+
     const filename = `${instruction.id}_${seed}.png`
 
     // Try Web Share API on mobile for better UX (native share sheet with "Save Image")
     if (navigator.share && navigator.canShare) {
       try {
         const blob = await new Promise<Blob>((resolve) =>
-          buffer.toBlob((b) => resolve(b!), 'image/png')
+          composite.toBlob((b) => resolve(b!), 'image/png')
         )
         const file = new File([blob], filename, { type: 'image/png' })
 
@@ -104,12 +117,12 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
     // Fallback: direct download
     const link = document.createElement('a')
     link.download = filename
-    link.href = buffer.toDataURL('image/png')
+    link.href = composite.toDataURL('image/png')
     link.click()
-  }, [instruction.id, instruction.title, seed])
+  }, [instruction.backgroundColor, instruction.id, instruction.title, seed])
 
   return (
-    <section className="wall-section" style={instruction.backgroundColor ? { backgroundColor: instruction.backgroundColor } : undefined}>
+    <section className="wall-section" style={{ backgroundColor: instruction.backgroundColor || '#ffffff' }}>
       <div className="instruction-header">
         <span className="instruction-label">
           {instruction.title} ({instruction.year})

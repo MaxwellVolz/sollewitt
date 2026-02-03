@@ -23,6 +23,19 @@ export function Gallery() {
           onReroll={() => reroll(drawing.id)}
         />
       ))}
+      <footer className="about-section">
+        <div className="about-content">
+          <h2>About This Project</h2>
+          <p>
+            A generative tribute to Sol LeWitt&apos;s instruction-based wall drawings.
+            Each piece is rendered algorithmically from LeWitt&apos;s original instructions,
+            producing unique variations with every reload.
+          </p>
+          <a href="https://intervolz.com/developing-sollewitt/" target="_blank" rel="noopener noreferrer">
+            Read about how this was built →
+          </a>
+        </div>
+      </footer>
     </>
   )
 }
