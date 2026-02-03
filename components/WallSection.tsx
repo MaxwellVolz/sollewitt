@@ -74,14 +74,39 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
     onReroll()
   }, [onReroll])
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     const buffer = canvasHandle.current?.getCanvas()
     if (!buffer) return
+
+    const filename = `${instruction.id}_${seed}.png`
+
+    // Try Web Share API on mobile for better UX (native share sheet with "Save Image")
+    if (navigator.share && navigator.canShare) {
+      try {
+        const blob = await new Promise<Blob>((resolve) =>
+          buffer.toBlob((b) => resolve(b!), 'image/png')
+        )
+        const file = new File([blob], filename, { type: 'image/png' })
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: instruction.title,
+          })
+          return
+        }
+      } catch (err) {
+        // User cancelled or share failed - fall through to download
+        if ((err as Error).name === 'AbortError') return
+      }
+    }
+
+    // Fallback: direct download
     const link = document.createElement('a')
-    link.download = `${instruction.id}_${seed}.png`
+    link.download = filename
     link.href = buffer.toDataURL('image/png')
     link.click()
-  }, [instruction.id, seed])
+  }, [instruction.id, instruction.title, seed])
 
   return (
     <section className="wall-section" style={instruction.backgroundColor ? { backgroundColor: instruction.backgroundColor } : undefined}>
