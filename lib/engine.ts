@@ -114,42 +114,47 @@ function handleDivideAndLines(
   }
 
   const allKinds = (linesStep.params.lineKinds as LineKind[]) || []
+  const colors = (linesStep.params.colors as string[] | undefined)
   const pick = (linesStep.params.pickPerCell as number) || 3
   const density = linesStep.params.density as { min: number; max: number }
   const unique = linesStep.params.unique as boolean | undefined
   const progressive = linesStep.params.progressive as boolean | undefined
 
   // For unique mode (#17), shuffle all kinds and assign one per cell without repeats
-  const shuffledKinds = unique || progressive ? shuffle(allKinds, rand) : null
+  // Shuffle indices to keep kinds and colors paired
+  const indices = allKinds.map((_, i) => i)
+  const shuffledIndices = unique || progressive ? shuffle(indices, rand) : null
   let cellIndex = 0
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      let cellKinds: LineKind[]
+      let cellIndices: number[]
       if (progressive) {
-        // Progressive mode (#56): cell 0 gets 1 kind, cell 1 gets 2, etc.
-        const numKinds = Math.min(cellIndex + 1, shuffledKinds!.length)
-        cellKinds = shuffledKinds!.slice(0, numKinds)
+        // Progressive mode (#56, #87): cell 0 gets 1 kind, cell 1 gets 2, etc.
+        const numKinds = Math.min(cellIndex + 1, shuffledIndices!.length)
+        cellIndices = shuffledIndices!.slice(0, numKinds)
         cellIndex++
-      } else if (shuffledKinds) {
-        cellKinds = [shuffledKinds[cellIndex % shuffledKinds.length]]
+      } else if (shuffledIndices) {
+        cellIndices = [shuffledIndices[cellIndex % shuffledIndices.length]]
         cellIndex++
       } else {
-        cellKinds = shuffle(allKinds, rand).slice(0, pick)
+        cellIndices = shuffle(indices, rand).slice(0, pick)
       }
 
       const x = c * cellW
       const y = r * cellH
 
-      for (const kind of cellKinds) {
+      for (const idx of cellIndices) {
+        const kind = allKinds[idx]
+        const color = colors ? colors[idx % colors.length] : '#222'
         const count = Math.floor(randRange(rand, density))
         const lines = generateLinesForCell(kind, x, y, cellW, cellH, count)
 
         for (const path of lines) {
           pushStroke(strokes, path, {
-            color: '#222',
+            color,
             width: 0.5 + rand() * 1,
-            opacity: 0.4 + rand() * 0.4,
+            opacity: colors ? 0.6 + rand() * 0.3 : 0.4 + rand() * 0.4,
           })
         }
       }
@@ -367,6 +372,276 @@ function handleCombinatorial(
   }
 }
 
+function handleScatteredLines(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'scattered-lines')
+  if (!step) return
+
+  const count = (step.params.count as number) || 1000
+  const lengthRatio = (step.params.lengthRatio as number) || 0.08
+  const angleVariation = (step.params.angleVariation as number) || Math.PI
+
+  const lineLength = lengthRatio * Math.min(w, h)
+
+  for (let i = 0; i < count; i++) {
+    const cx = rand() * w
+    const cy = rand() * h
+    const angle = rand() * angleVariation * 2 - angleVariation
+
+    const dx = Math.cos(angle) * lineLength / 2
+    const dy = Math.sin(angle) * lineLength / 2
+
+    pushStroke(strokes, [
+      [cx - dx, cy - dy],
+      [cx + dx, cy + dy],
+    ], {
+      color: '#222',
+      width: 0.3 + rand() * 0.5,
+      opacity: 0.3 + rand() * 0.4,
+    })
+  }
+}
+
+function handleGridWobbly(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'grid-wobbly')
+  if (!step) return
+
+  const cellRatio = (step.params.cellSize as number) || 0.08
+  const lineKinds = (step.params.lineKinds as LineKind[]) || ['horizontal', 'vertical', 'diagonal-left', 'diagonal-right']
+  const linesPerCell = step.params.linesPerCell as { min: number; max: number }
+  const wobbleRange = step.params.wobble as { min: number; max: number }
+  const segRange = step.params.segments as { min: number; max: number }
+  const drawGrid = step.params.drawGrid as boolean | undefined
+
+  const cellSize = cellRatio * Math.min(w, h)
+  const cols = Math.floor(w / cellSize)
+  const rows = Math.floor(h / cellSize)
+
+  // Draw grid lines if requested
+  if (drawGrid) {
+    const gridStyle = { color: '#ccc', width: 0.5, opacity: 0.5 }
+    for (let c = 0; c <= cols; c++) {
+      pushStroke(strokes, [[c * cellSize, 0], [c * cellSize, rows * cellSize]], gridStyle)
+    }
+    for (let r = 0; r <= rows; r++) {
+      pushStroke(strokes, [[0, r * cellSize], [cols * cellSize, r * cellSize]], gridStyle)
+    }
+  }
+
+  // Generate wobbly lines for each cell
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c * cellSize
+      const y = r * cellSize
+      const kind = lineKinds[Math.floor(rand() * lineKinds.length)]
+      const lineCount = Math.floor(randRange(rand, linesPerCell))
+
+      for (let i = 0; i < lineCount; i++) {
+        const t = (i + 0.5) / lineCount
+        const segments = Math.floor(randRange(rand, segRange))
+        const wobble = randRange(rand, wobbleRange) * cellSize
+        const path: [number, number][] = []
+
+        // Calculate line start/end points based on direction
+        let x0: number, y0: number, x1: number, y1: number
+
+        switch (kind) {
+          case 'horizontal':
+            x0 = 0; y0 = t * cellSize
+            x1 = cellSize; y1 = t * cellSize
+            break
+          case 'vertical':
+            x0 = t * cellSize; y0 = 0
+            x1 = t * cellSize; y1 = cellSize
+            break
+          case 'diagonal-right': {
+            // Parallel \ lines spread across the cell
+            const k = -cellSize + t * 2 * cellSize
+            x0 = Math.max(0, -k)
+            y0 = Math.max(0, k)
+            x1 = Math.min(cellSize, cellSize - k)
+            y1 = Math.min(cellSize, cellSize + k)
+            break
+          }
+          case 'diagonal-left': {
+            // Parallel / lines spread across the cell
+            const k = t * 2 * cellSize
+            x0 = Math.max(0, k - cellSize)
+            y0 = Math.min(k, cellSize)
+            x1 = Math.min(cellSize, k)
+            y1 = Math.max(0, k - cellSize)
+            break
+          }
+        }
+
+        // Generate wobbly path along the line
+        for (let s = 0; s <= segments; s++) {
+          const st = s / segments
+          const wobbleOffset = (rand() - 0.5) * 2 * wobble
+
+          // Interpolate along the line
+          const lx = x0 + st * (x1 - x0)
+          const ly = y0 + st * (y1 - y0)
+
+          // Add perpendicular wobble
+          const dx = x1 - x0
+          const dy = y1 - y0
+          const len = Math.sqrt(dx * dx + dy * dy) || 1
+          const perpX = -dy / len
+          const perpY = dx / len
+
+          path.push([x + lx + perpX * wobbleOffset, y + ly + perpY * wobbleOffset])
+        }
+
+        if (path.length > 1) {
+          pushStroke(strokes, path, {
+            color: '#222',
+            width: 0.5 + rand() * 0.8,
+            opacity: 0.4 + rand() * 0.4,
+          })
+        }
+      }
+    }
+  }
+}
+
+function handleCombinatorialWobbly(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'combinatorial-wobbly')
+  if (!step) return
+
+  const colors = (step.params.colors as string[]) || []
+  const linesPerColor = step.params.linesPerColor as { min: number; max: number }
+  const wobbleRange = step.params.wobble as { min: number; max: number }
+  const segRange = step.params.segments as { min: number; max: number }
+
+  // Generate all color combinations: singles, pairs, triples, all four
+  const singles = getCombinations(colors, 1)
+  const pairs = getCombinations(colors, 2)
+  const triples = getCombinations(colors, 3)
+  const quads = getCombinations(colors, 4)
+
+  // Shuffle and combine all (4 + 6 + 4 + 1 = 15 combinations)
+  const allCombinations = [
+    ...shuffle(singles, rand),
+    ...shuffle(pairs, rand),
+    ...shuffle(triples, rand),
+    ...quads,
+  ]
+
+  const cols = allCombinations.length
+  const colWidth = w / cols
+
+  for (let c = 0; c < cols; c++) {
+    const x = c * colWidth
+    const colorSet = allCombinations[c]
+
+    // Draw wobbly vertical lines for each color in this combination
+    for (const color of colorSet) {
+      const lineCount = Math.floor(randRange(rand, linesPerColor))
+
+      for (let i = 0; i < lineCount; i++) {
+        const t = (i + 0.5) / lineCount
+        const lineX = x + t * colWidth
+        const segments = Math.floor(randRange(rand, segRange))
+        const wobble = randRange(rand, wobbleRange) * w
+        const path: [number, number][] = []
+
+        for (let s = 0; s <= segments; s++) {
+          const st = s / segments
+          const wobbleOffset = (rand() - 0.5) * 2 * wobble
+          path.push([lineX + wobbleOffset, st * h])
+        }
+
+        pushStroke(strokes, path, {
+          color,
+          width: 0.5 + rand() * 1,
+          opacity: 0.5 + rand() * 0.4,
+        })
+      }
+    }
+  }
+}
+
+function handleGridAndArcs(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'grid-and-arcs')
+  if (!step) return
+
+  const gridRatio = (step.params.gridSize as number) || 0.05
+  const arcCountRange = step.params.arcCount as { min: number; max: number }
+  const arcSpacingRatio = (step.params.arcSpacing as number) || 0.03
+
+  const gridSize = gridRatio * Math.min(w, h)
+  const arcSpacing = arcSpacingRatio * Math.min(w, h)
+  const arcCount = Math.floor(randRange(rand, arcCountRange))
+
+  const gridStyle = { color: '#222', width: 0.5, opacity: 0.3 }
+
+  // Draw grid
+  const cols = Math.ceil(w / gridSize)
+  const rows = Math.ceil(h / gridSize)
+
+  for (let c = 0; c <= cols; c++) {
+    pushStroke(strokes, [[c * gridSize, 0], [c * gridSize, h]], gridStyle)
+  }
+  for (let r = 0; r <= rows; r++) {
+    pushStroke(strokes, [[0, r * gridSize], [w, r * gridSize]], gridStyle)
+  }
+
+  // Draw arcs from four corners
+  const corners: { x: number; y: number; startAngle: number; endAngle: number }[] = [
+    { x: 0, y: 0, startAngle: 0, endAngle: Math.PI / 2 },           // top-left
+    { x: w, y: 0, startAngle: Math.PI / 2, endAngle: Math.PI },     // top-right
+    { x: w, y: h, startAngle: Math.PI, endAngle: 3 * Math.PI / 2 }, // bottom-right
+    { x: 0, y: h, startAngle: 3 * Math.PI / 2, endAngle: 2 * Math.PI }, // bottom-left
+  ]
+
+  const arcStyle = { color: '#222', width: 0.8, opacity: 0.5 }
+  const segments = 32 // segments per arc for smoothness
+
+  for (const corner of corners) {
+    for (let i = 1; i <= arcCount; i++) {
+      const radius = i * arcSpacing
+      const path: [number, number][] = []
+
+      for (let s = 0; s <= segments; s++) {
+        const angle = corner.startAngle + (s / segments) * (corner.endAngle - corner.startAngle)
+        const px = corner.x + Math.cos(angle) * radius
+        const py = corner.y + Math.sin(angle) * radius
+        path.push([px, py])
+      }
+
+      pushStroke(strokes, path, {
+        ...arcStyle,
+        width: 0.5 + rand() * 0.5,
+        opacity: 0.4 + rand() * 0.3,
+      })
+    }
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -398,6 +673,22 @@ export function generateStrokes(
 
   if (stepTypes.has('combinatorial')) {
     handleCombinatorial(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('scattered-lines')) {
+    handleScatteredLines(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('grid-wobbly')) {
+    handleGridWobbly(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('combinatorial-wobbly')) {
+    handleCombinatorialWobbly(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('grid-and-arcs')) {
+    handleGridAndArcs(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes
