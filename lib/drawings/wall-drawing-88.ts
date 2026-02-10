@@ -12,6 +12,7 @@ export const wallDrawing88: DrawingInstruction = {
       type: 'grid-wobbly',
       params: {
         cellSize: 0.08,
+        fillViewport: true,
         lineKinds: ['horizontal', 'vertical', 'diagonal-left', 'diagonal-right'],
         linesPerCell: { min: 3, max: 12 },
         wobble: { min: 0.02, max: 0.04 },

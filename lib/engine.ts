@@ -424,26 +424,44 @@ function handleGridWobbly(
   const segRange = step.params.segments as { min: number; max: number }
   const drawGrid = step.params.drawGrid as boolean | undefined
 
-  const cellSize = cellRatio * Math.min(w, h)
-  const cols = Math.floor(w / cellSize)
-  const rows = Math.floor(h / cellSize)
+  const fillViewport = step.params.fillViewport as boolean | undefined
+  let cellSize: number
+  let cellW: number
+  let cellH: number
+  let cols: number
+  let rows: number
+
+  if (fillViewport) {
+    const approxCell = cellRatio * Math.min(w, h)
+    cols = Math.max(1, Math.round(w / approxCell))
+    rows = Math.max(1, Math.round(h / approxCell))
+    cellW = w / cols
+    cellH = h / rows
+    cellSize = Math.min(cellW, cellH)
+  } else {
+    cellSize = cellRatio * Math.min(w, h)
+    cols = Math.floor(w / cellSize)
+    rows = Math.floor(h / cellSize)
+    cellW = cellSize
+    cellH = cellSize
+  }
 
   // Draw grid lines if requested
   if (drawGrid) {
     const gridStyle = { color: '#ccc', width: 0.5, opacity: 0.5 }
     for (let c = 0; c <= cols; c++) {
-      pushStroke(strokes, [[c * cellSize, 0], [c * cellSize, rows * cellSize]], gridStyle)
+      pushStroke(strokes, [[c * cellW, 0], [c * cellW, rows * cellH]], gridStyle)
     }
     for (let r = 0; r <= rows; r++) {
-      pushStroke(strokes, [[0, r * cellSize], [cols * cellSize, r * cellSize]], gridStyle)
+      pushStroke(strokes, [[0, r * cellH], [cols * cellW, r * cellH]], gridStyle)
     }
   }
 
   // Generate wobbly lines for each cell
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const x = c * cellSize
-      const y = r * cellSize
+      const x = c * cellW
+      const y = r * cellH
       const kind = lineKinds[Math.floor(rand() * lineKinds.length)]
       const lineCount = Math.floor(randRange(rand, linesPerCell))
 
@@ -458,29 +476,29 @@ function handleGridWobbly(
 
         switch (kind) {
           case 'horizontal':
-            x0 = 0; y0 = t * cellSize
-            x1 = cellSize; y1 = t * cellSize
+            x0 = 0; y0 = t * cellH
+            x1 = cellW; y1 = t * cellH
             break
           case 'vertical':
-            x0 = t * cellSize; y0 = 0
-            x1 = t * cellSize; y1 = cellSize
+            x0 = t * cellW; y0 = 0
+            x1 = t * cellW; y1 = cellH
             break
           case 'diagonal-right': {
             // Parallel \ lines spread across the cell
             const k = -cellSize + t * 2 * cellSize
-            x0 = Math.max(0, -k)
-            y0 = Math.max(0, k)
-            x1 = Math.min(cellSize, cellSize - k)
-            y1 = Math.min(cellSize, cellSize + k)
+            x0 = Math.max(0, -k) * (cellW / cellSize)
+            y0 = Math.max(0, k) * (cellH / cellSize)
+            x1 = Math.min(cellSize, cellSize - k) * (cellW / cellSize)
+            y1 = Math.min(cellSize, cellSize + k) * (cellH / cellSize)
             break
           }
           case 'diagonal-left': {
             // Parallel / lines spread across the cell
             const k = t * 2 * cellSize
-            x0 = Math.max(0, k - cellSize)
-            y0 = Math.min(k, cellSize)
-            x1 = Math.min(cellSize, k)
-            y1 = Math.max(0, k - cellSize)
+            x0 = Math.max(0, k - cellSize) * (cellW / cellSize)
+            y0 = Math.min(k, cellSize) * (cellH / cellSize)
+            x1 = Math.min(cellSize, k) * (cellW / cellSize)
+            y1 = Math.max(0, k - cellSize) * (cellH / cellSize)
             break
           }
         }
@@ -642,6 +660,238 @@ function handleGridAndArcs(
   }
 }
 
+function handleMidpointArcs(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'midpoint-arcs')
+  if (!step) return
+
+  const arcCountRange = step.params.arcCount as { min: number; max: number }
+  const arcSpacingRatio = (step.params.arcSpacing as number) || 0.03
+
+  const arcSpacing = arcSpacingRatio * Math.min(w, h)
+  const arcCount = Math.floor(randRange(rand, arcCountRange))
+
+  const arcStyle = { color: '#222', width: 0.8, opacity: 0.5 }
+  const segments = 48
+
+  // Midpoints of four sides with their sweep angles (into the canvas)
+  const midpoints: { x: number; y: number; startAngle: number; endAngle: number }[] = [
+    { x: w / 2, y: 0, startAngle: 0, endAngle: Math.PI },                   // top — sweeps down
+    { x: w, y: h / 2, startAngle: Math.PI / 2, endAngle: 3 * Math.PI / 2 }, // right — sweeps left
+    { x: w / 2, y: h, startAngle: Math.PI, endAngle: 2 * Math.PI },         // bottom — sweeps up
+    { x: 0, y: h / 2, startAngle: -Math.PI / 2, endAngle: Math.PI / 2 },    // left — sweeps right
+  ]
+
+  for (const mp of midpoints) {
+    for (let i = 1; i <= arcCount; i++) {
+      const radius = i * arcSpacing
+      const path: [number, number][] = []
+
+      for (let s = 0; s <= segments; s++) {
+        const angle = mp.startAngle + (s / segments) * (mp.endAngle - mp.startAngle)
+        const px = mp.x + Math.cos(angle) * radius
+        const py = mp.y + Math.sin(angle) * radius
+        path.push([px, py])
+      }
+
+      pushStroke(strokes, path, {
+        ...arcStyle,
+        width: 0.5 + rand() * 0.5,
+        opacity: 0.4 + rand() * 0.3,
+      })
+    }
+  }
+}
+
+function handleProgressiveWobblyGrid(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'progressive-wobbly-grid')
+  if (!step) return
+
+  const gridRatio = (step.params.gridSize as number) || 0.09
+  const wobbleRange = step.params.wobble as { min: number; max: number }
+  const segPerCellRange = step.params.segmentsPerCell as { min: number; max: number }
+
+  const fillViewport = step.params.fillViewport as boolean | undefined
+  let gridW: number
+  let gridH: number
+  let cols: number
+  let rows: number
+
+  if (fillViewport) {
+    const approxGrid = gridRatio * Math.min(w, h)
+    cols = Math.max(1, Math.round(w / approxGrid))
+    rows = Math.max(1, Math.round(h / approxGrid))
+    gridW = w / cols
+    gridH = h / rows
+  } else {
+    const gridSize = gridRatio * Math.min(w, h)
+    cols = Math.floor(w / gridSize)
+    rows = Math.floor(h / gridSize)
+    gridW = gridSize
+    gridH = gridSize
+  }
+
+  const totalW = cols * gridW
+  const totalH = rows * gridH
+
+  // Draw grid
+  const gridStyle = { color: '#222', width: 0.5, opacity: 0.3 }
+  for (let c = 0; c <= cols; c++) {
+    pushStroke(strokes, [[c * gridW, 0], [c * gridW, totalH]], gridStyle)
+  }
+  for (let r = 0; r <= rows; r++) {
+    pushStroke(strokes, [[0, r * gridH], [totalW, r * gridH]], gridStyle)
+  }
+
+  const lineStyle = { color: '#222', width: 0.5, opacity: 0.5 }
+
+  // Vertical wobbly lines — column c (0-indexed from left) has (c+1) lines
+  for (let c = 0; c < cols; c++) {
+    const lineCount = c + 1
+    const colX = c * gridW
+
+    for (let i = 0; i < lineCount; i++) {
+      const t = (i + 0.5) / lineCount
+      const x = colX + t * gridW
+      const segments = rows * Math.floor(randRange(rand, segPerCellRange))
+      const wobble = randRange(rand, wobbleRange) * gridW
+      const path: [number, number][] = []
+
+      for (let s = 0; s <= segments; s++) {
+        const st = s / segments
+        const offsetX = (rand() - 0.5) * 2 * wobble
+        path.push([x + offsetX, st * totalH])
+      }
+
+      pushStroke(strokes, path, {
+        ...lineStyle,
+        width: 0.5 + rand() * 0.8,
+        opacity: 0.4 + rand() * 0.4,
+      })
+    }
+  }
+
+  // Horizontal wobbly lines — drawn from bottom to top
+  // In canvas coords, row 0 is top, row (rows-1) is bottom
+  // Bottom row gets 1 line, top row gets `rows` lines
+  for (let r = rows - 1; r >= 0; r--) {
+    const lineCount = rows - r // top row = rows lines, bottom row = 1 line
+    const rowY = r * gridH
+
+    for (let i = lineCount - 1; i >= 0; i--) {
+      const t = (i + 0.5) / lineCount
+      const y = rowY + t * gridH
+      const segments = cols * Math.floor(randRange(rand, segPerCellRange))
+      const wobble = randRange(rand, wobbleRange) * gridH
+      const path: [number, number][] = []
+
+      for (let s = 0; s <= segments; s++) {
+        const st = s / segments
+        const offsetY = (rand() - 0.5) * 2 * wobble
+        path.push([st * totalW, y + offsetY])
+      }
+
+      pushStroke(strokes, path, {
+        ...lineStyle,
+        width: 0.5 + rand() * 0.8,
+        opacity: 0.4 + rand() * 0.4,
+      })
+    }
+  }
+}
+
+function resolveRange(rand: () => number, value: unknown): number {
+  if (typeof value === 'number') return value
+  if (value && typeof value === 'object' && 'min' in value && 'max' in value) {
+    return randRange(rand, value as { min: number; max: number })
+  }
+  return 0
+}
+
+function handleSquareAndLine(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'square-and-line')
+  if (!step) return
+
+  const squareColor = (step.params.squareColor as string) || '#222'
+  const squareWidth = resolveRange(rand, step.params.squareWidth) || 2
+  const squareOpacity = resolveRange(rand, step.params.squareOpacity) || 1
+  const lines = (step.params.lines as { from: [unknown, unknown]; to: [unknown, unknown]; color: string; width: unknown; opacity?: unknown; length?: unknown; centered?: boolean }[]) || []
+
+  // Center a square that fits within the canvas with some margin
+  const margin = 0.1 * Math.min(w, h)
+  const size = Math.min(w, h) - margin * 2
+  const ox = (w - size) / 2
+  const oy = (h - size) / 2
+
+  // Draw square outline as 4 edges
+  const sq = { color: squareColor, width: squareWidth, opacity: squareOpacity }
+  pushStroke(strokes, [[ox, oy], [ox + size, oy]], sq)                       // top
+  pushStroke(strokes, [[ox + size, oy], [ox + size, oy + size]], sq)         // right
+  pushStroke(strokes, [[ox + size, oy + size], [ox, oy + size]], sq)         // bottom
+  pushStroke(strokes, [[ox, oy + size], [ox, oy]], sq)                       // left
+
+  // Draw lines (coordinates are normalized 0-1 relative to the square, support ranges)
+  for (const line of lines) {
+    let startX: number, startY: number, endX: number, endY: number
+    const fX = resolveRange(rand, line.from[0])
+    const fY = resolveRange(rand, line.from[1])
+    const tX = resolveRange(rand, line.to[0])
+    const tY = resolveRange(rand, line.to[1])
+
+    if (line.length !== undefined) {
+      const t = resolveRange(rand, line.length)
+      if (line.centered) {
+        // Line segment centered on the midpoint of from→to
+        const midX = (fX + tX) / 2
+        const midY = (fY + tY) / 2
+        const dx = (tX - fX) / 2
+        const dy = (tY - fY) / 2
+        startX = midX - t * dx
+        startY = midY - t * dy
+        endX = midX + t * dx
+        endY = midY + t * dy
+      } else {
+        // Interpolate from→to, preserving exact angle
+        startX = fX
+        startY = fY
+        endX = fX + t * (tX - fX)
+        endY = fY + t * (tY - fY)
+      }
+    } else {
+      startX = fX
+      startY = fY
+      endX = tX
+      endY = tY
+    }
+
+    pushStroke(strokes, [
+      [ox + startX * size, oy + startY * size],
+      [ox + endX * size, oy + endY * size],
+    ], {
+      color: line.color || '#c23b22',
+      width: resolveRange(rand, line.width) || 2,
+      opacity: resolveRange(rand, line.opacity) || 1,
+    })
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -689,6 +939,18 @@ export function generateStrokes(
 
   if (stepTypes.has('grid-and-arcs')) {
     handleGridAndArcs(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('midpoint-arcs')) {
+    handleMidpointArcs(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('progressive-wobbly-grid')) {
+    handleProgressiveWobblyGrid(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('square-and-line')) {
+    handleSquareAndLine(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes

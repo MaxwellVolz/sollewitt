@@ -16,6 +16,9 @@ const PLAY_DURATION = 5000
 
 export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
   const [isPlaying, setIsPlaying] = useState(false)
+  const [hasPlayed, setHasPlayed] = useState(false)
+  const [showInstructions, setShowInstructions] = useState(true)
+  const [fadeOut, setFadeOut] = useState(false)
   const [timelineProgress, setTimelineProgress] = useState(0)
   const rafRef = useRef<number>(0)
   const startRef = useRef<number>(0)
@@ -25,6 +28,7 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
 
   const play = useCallback(() => {
     setIsPlaying(true)
+    setHasPlayed(true)
     progressRef.current = 0
     setTimelineProgress(0)
     startRef.current = performance.now()
@@ -49,11 +53,14 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
     rafRef.current = requestAnimationFrame(tick)
   }, [])
 
-  const stop = useCallback(() => {
-    cancelAnimationFrame(rafRef.current)
-    setTimelineProgress(progressRef.current)
-    setIsPlaying(false)
-  }, [])
+  const handleCreate = useCallback(() => {
+    setFadeOut(true)
+    setTimeout(() => {
+      setShowInstructions(false)
+      setFadeOut(false)
+      play()
+    }, 400)
+  }, [play])
 
   useEffect(() => {
     return () => cancelAnimationFrame(rafRef.current)
@@ -68,9 +75,10 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
 
   const handleReroll = useCallback(() => {
     cancelAnimationFrame(rafRef.current)
-    setIsPlaying(false)
     progressRef.current = 0
     setTimelineProgress(0)
+    setHasPlayed(false)
+    setShowInstructions(true)
     onReroll()
   }, [onReroll])
 
@@ -121,16 +129,23 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
     link.click()
   }, [instruction.backgroundColor, instruction.id, instruction.title, seed])
 
+  const drawingDone = hasPlayed && !isPlaying
+
   return (
     <section className="wall-section" style={{ backgroundColor: instruction.backgroundColor || '#ffffff' }}>
-      <div className="instruction-header">
-        <span className="instruction-label">
-          {instruction.title} ({instruction.year})
-        </span>
-        <span className="instruction-subtitle">{instruction.description}</span>
-      </div>
+      {showInstructions && (
+        <div className={`instruction-header${fadeOut ? ' fade-out' : ''}`}>
+          <span className="instruction-label">
+            {instruction.title} ({instruction.year})
+          </span>
+          <span className="instruction-subtitle">{instruction.description}</span>
+          <button className="create-button" onClick={handleCreate}>Create</button>
+        </div>
+      )}
       <DrawingCanvas ref={canvasHandle} instruction={instruction} seed={seed} progressRef={progressRef} />
-      <Controls isPlaying={isPlaying} onPlay={play} onStop={stop} onReroll={handleReroll} onDownload={handleDownload} />
+      {drawingDone && (
+        <Controls onReroll={handleReroll} onDownload={handleDownload} />
+      )}
       <Timeline ref={timelineBarRef} progress={timelineProgress} onSeek={handleSeek} />
     </section>
   )
