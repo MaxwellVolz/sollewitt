@@ -222,30 +222,30 @@ main {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  /* overflow: visible so the rotated grid's high corner can extend up
-     past its layout box without getting flat-clipped at the top. The
-     about-section still has overflow: hidden, so any overshoot stops
-     at the section boundary instead of bleeding into adjacent drawings. */
   overflow: visible;
-  padding: 1.5rem 0.5rem 1rem;
+  padding: 2rem 0.5rem 1rem;
+  /* Establish a 3D viewing context. Tile rotateX/translateZ in children
+     resolves into real perspective foreshortening and hover-Z pop. */
+  perspective: 1400px;
+  perspective-origin: center 35%;
 }
 
 .hex-grid {
   /* Tile positions are computed in JS (HexGallery). The container is a
      positioning context, sized by inline style. */
   position: relative;
-  /* Subtle rotation gives the index a less-clinical feel without
-     compromising the click target geometry. */
-  transform: rotate(-5deg);
-  transform-origin: center center;
-  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 3D tilt: rotate the whole index plane like a table tipped slightly
+     toward the camera, with a small Z twist for character. */
+  transform: rotateX(26deg) rotateZ(-3deg);
+  transform-origin: center 60%;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* On hover anywhere in the gallery, lean the whole grid forward — a small
-   shift that signals interactivity for the entire index, not just the tile
-   under the cursor. */
+/* When the gallery is hovered, lift the plane back toward the viewer a
+   touch — the rest of the lift comes from the per-tile rise. */
 .hex-gallery:hover .hex-grid {
-  transform: rotate(-3deg) translateY(-6px);
+  transform: rotateX(20deg) rotateZ(-3deg);
 }
 
 .hex-preview {
@@ -260,7 +260,23 @@ main {
   color: rgba(20, 20, 20, 0.65);
   font: inherit;
   display: block;
-  transition: color 0.18s ease, transform 0.18s ease;
+  transform-style: preserve-3d;
+  transition: color 0.22s ease, transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Each tile drops in from above the plane at mount, staggered by index
+     so the grid assembles itself like cards being dealt onto a table. */
+  animation: hex-fall-in 0.65s cubic-bezier(0.2, 0.85, 0.3, 1) both;
+  animation-delay: calc(var(--i, 0) * 28ms);
+}
+
+@keyframes hex-fall-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -40px, 90px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
 }
 
 .hex-clip {
@@ -296,8 +312,11 @@ main {
 .hex-preview:hover,
 .hex-preview:focus-visible {
   color: rgba(20, 20, 20, 0.95);
-  transform: scale(1.06);
-  z-index: 2;
+  /* Pop the tile out of the plane toward the viewer. With perspective on
+     the gallery, translateZ resolves into real 3D depth — combined with
+     the grid's rotateX, hovered tiles "rise" off the table surface. */
+  transform: translate3d(0, 0, 38px);
+  z-index: 5;
 }
 
 .hex-preview:hover .hex-clip,

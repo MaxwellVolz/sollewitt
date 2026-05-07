@@ -58,7 +58,13 @@ export function HexGallery() {
               key={drawing.id}
               instruction={drawing}
               index={i}
-              style={{ left: `${left}px`, top: `${top}px`, width: `${hexW}px`, height: `${hexH}px` }}
+              style={{
+                left: `${left}px`,
+                top: `${top}px`,
+                width: `${hexW}px`,
+                height: `${hexH}px`,
+                ['--i' as string]: i,
+              } as React.CSSProperties}
             />
           )
         })}
