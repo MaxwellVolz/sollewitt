@@ -1,6 +1,6 @@
 # Sol LeWitt Generative Wall Drawings
 
-A Next.js web gallery that renders Sol LeWitt's instruction-based wall drawings using generative algorithms.
+A Next.js web gallery that renders Sol LeWitt's instruction-based wall drawings using generative algorithms. 20 drawings implemented across 1969–1973.
 
 ## Commands
 
@@ -33,6 +33,8 @@ types/
   drawings.ts           # TypeScript types for DrawingInstruction, StrokeElement, etc.
 styles/
   globals.css           # All styles (no CSS modules)
+docs/
+  drawing_instructions.md  # Original LeWitt instruction texts (implemented + candidates)
 ```
 
 ### Drawing System
@@ -46,19 +48,27 @@ The engine (`lib/engine.ts`) interprets these steps and generates `StrokeElement
 
 ### Step Types
 
-| Type | Description | Example |
+| Type | Description | Used by |
 |------|-------------|---------|
-| `divide` + `lines` | Grid of cells with line directions | #17, #56 |
-| `bands` | Randomly placed bands of parallel lines | #46, #47 |
-| `pegboard` | Grid of colored squares | #38 |
-| `wobbly-lines` | Hand-drawn style vertical lines | #11 |
-| `combinatorial` | All combinations of line directions in rows | #85 |
+| `divide` | Splits the wall into a grid of cells (optional `drawGrid`) | #11, #17, #19, #47, #56, #85, #87 |
+| `lines` | Fills cells with line-kind combinations (modes: `unique`, `progressive`, default) | #11, #17, #19, #47, #56, #87 |
+| `bands` | Random bands of parallel lines in selected directions | #16 |
+| `pegboard` | Grid of evenly-spaced colored squares on a gray ground | #38 |
+| `wobbly-lines` | Hand-drawn-style not-straight lines in one direction | #46 |
+| `combinatorial` | Rows enumerating 1-, 2-, 3-, 4-direction combinations | #85 |
+| `scattered-lines` | Many short lines at random positions and angles | #86 |
+| `grid-wobbly` | Grid where each cell holds wobbly lines in one direction | #88 |
+| `combinatorial-wobbly` | Color combinations of vertical wobbly lines across cells | #95 |
+| `grid-and-arcs` | Grid plus concentric arcs swept from each corner | #130 |
+| `midpoint-arcs` | Concentric circles/arcs centered on the four side midpoints | #138 |
+| `progressive-wobbly-grid` | Grid where wobbly-line counts increase row by row | #142 |
+| `square-and-line` | Outlined square plus colored lines from `from`/`to` anchors | #154, #159, #160 |
 
 ### Line Modes (for divide + lines)
 
 - `unique: true` - Each cell gets a different single direction (#17)
-- `progressive: true` - Cell 0 gets 1 direction, cell 1 gets 2, etc. (#56)
-- Default - Each cell gets `pickPerCell` random directions
+- `progressive: true` - Cell 0 gets 1 direction, cell 1 gets 2, etc. (#56, #87)
+- Default - Each cell gets `pickPerCell` random directions (#11, #19, #47)
 
 ### Key Patterns
 
@@ -71,9 +81,11 @@ The engine (`lib/engine.ts`) interprets these steps and generates `StrokeElement
 
 ## Adding a New Drawing
 
-1. Create `lib/drawings/wall-drawing-{N}.ts` with a `DrawingInstruction`
-2. Add import and export in `lib/drawings/index.ts`
-3. If new step type needed, add handler in `lib/engine.ts` and type in `types/drawings.ts`
+1. Pick (or transcribe) an instruction. Candidates are queued in `docs/drawing_instructions.md`.
+2. Create `lib/drawings/wall-drawing-{N}.ts` with a `DrawingInstruction`.
+3. Add import and export in `lib/drawings/index.ts`.
+4. If a new step type is needed, add the literal to `DrawingStep['type']` in `types/drawings.ts` and a handler in `lib/engine.ts`.
+5. Update `docs/drawing_instructions.md` (move the entry from Candidates → Implemented).
 
 ## Style Guide
 
