@@ -261,17 +261,26 @@ main {
   font: inherit;
   display: block;
   transform-style: preserve-3d;
-  transition: color 0.22s ease, transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* Each tile drops in from above the plane at mount, staggered by index
-     so the grid assembles itself like cards being dealt onto a table. */
-  animation: hex-fall-in 0.65s cubic-bezier(0.2, 0.85, 0.3, 1) both;
-  animation-delay: calc(var(--i, 0) * 28ms);
+  /* Hint GPU compositor promotion for both the entrance animation and any
+     hover-driven transform. Without this, 22 simultaneously-animating 3D
+     elements sometimes fall back to CPU paint and stutter. */
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transition: color 0.22s ease, transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* Each tile drops in from above and forward of the plane at mount,
+     staggered by index so the grid assembles itself one cell at a time
+     over a few seconds. With 22 tiles × 130ms stagger + 0.85s duration,
+     the full sequence runs ~3.5 seconds.
+     Easing is a pure ease-out (no overshoot) so the settle is smooth
+     rather than briefly springy. */
+  animation: hex-fall-in 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 130ms);
 }
 
 @keyframes hex-fall-in {
   from {
     opacity: 0;
-    transform: translate3d(0, -40px, 90px);
+    transform: translate3d(0, -120px, 240px);
   }
   to {
     opacity: 1;
@@ -312,11 +321,13 @@ main {
 .hex-preview:hover,
 .hex-preview:focus-visible {
   color: rgba(20, 20, 20, 0.95);
-  /* Pop the tile out of the plane toward the viewer. With perspective on
-     the gallery, translateZ resolves into real 3D depth — combined with
-     the grid's rotateX, hovered tiles "rise" off the table surface. */
-  transform: translate3d(0, 0, 38px);
-  z-index: 5;
+  /* Pop the tile up and forward off the plane. With perspective on the
+     gallery, translateZ is real depth — the hovered tile rises toward
+     the viewer above its neighbors. The negative Y nudge exaggerates the
+     "lifting off the table" read. z-index: 10 is a belt-and-braces stack
+     guarantee for browsers that prefer painters-algorithm over depth. */
+  transform: translate3d(0, -8px, 70px);
+  z-index: 10;
 }
 
 .hex-preview:hover .hex-clip,

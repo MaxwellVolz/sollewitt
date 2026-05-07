@@ -1,16 +1,41 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { drawings } from '@/lib/drawings'
 import { HexPreview } from './HexPreview'
 
 const HEX_W_DESKTOP = 96
 const HEX_W_MOBILE = 64
 
+// Deterministic string → integer hash so fall-in order can be randomized
+// without breaking SSR/hydration: server and client compute the same
+// shuffle from the drawing IDs.
+function hashCode(s: string): number {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
 export function HexGallery() {
   const containerRef = useRef<HTMLDivElement>(null)
   const [cols, setCols] = useState(8)
   const [hexW, setHexW] = useState(HEX_W_DESKTOP)
+
+  // Shuffle the fall-in order by sorting indices by a stable hash of each
+  // drawing's id. The mapping is array-position → fall-order-rank, so a
+  // tile's animation-delay no longer correlates with its grid position.
+  const fallOrder = useMemo(() => {
+    const ranked = drawings.map((d, i) => ({ i, h: hashCode(d.id) }))
+    ranked.sort((a, b) => a.h - b.h)
+    const order: number[] = new Array(drawings.length)
+    ranked.forEach((entry, rank) => {
+      order[entry.i] = rank
+    })
+    return order
+  }, [])
 
   useEffect(() => {
     const el = containerRef.current
@@ -63,7 +88,7 @@ export function HexGallery() {
                 top: `${top}px`,
                 width: `${hexW}px`,
                 height: `${hexH}px`,
-                ['--i' as string]: i,
+                ['--i' as string]: fallOrder[i],
               } as React.CSSProperties}
             />
           )
