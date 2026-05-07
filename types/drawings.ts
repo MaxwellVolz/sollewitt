@@ -17,7 +17,7 @@ export interface DrawingInstruction {
 }
 
 export interface DrawingStep {
-  type: 'divide' | 'lines' | 'arcs' | 'shapes' | 'fill' | 'bands' | 'pegboard' | 'wobbly-lines' | 'combinatorial' | 'scattered-lines' | 'grid-wobbly' | 'combinatorial-wobbly' | 'grid-and-arcs' | 'midpoint-arcs' | 'progressive-wobbly-grid' | 'square-and-line' | 'architectural-points' | 'random-wobbly'
+  type: 'divide' | 'lines' | 'arcs' | 'shapes' | 'fill' | 'bands' | 'pegboard' | 'wobbly-lines' | 'combinatorial' | 'scattered-lines' | 'grid-wobbly' | 'combinatorial-wobbly' | 'grid-and-arcs' | 'midpoint-arcs' | 'progressive-wobbly-grid' | 'square-and-line' | 'architectural-points' | 'random-wobbly' | 'circle-scatter'
   params: Record<string, unknown>
 }
 

@@ -154,26 +154,32 @@ main {
 .about-section {
   position: relative;
   /* Fixed height (not min-height) so the section never grows to fit gallery
-     content. Combined with overflow:hidden and minmax(0,...) on the rows,
-     this freezes the about-content's vertical position regardless of the
-     gallery's measured size after ResizeObserver settles. */
+     content. Flex column gives us predictable horizontal centering at any
+     viewport width — grid + justify-items was off-by-overflow on narrow
+     screens because items wider than their cell escape the cell to the
+     right rather than centering. */
   height: 100dvh;
-  display: grid;
-  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
-  justify-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   background: var(--fg);
   color: var(--bg);
   scroll-snap-align: start;
   scroll-snap-stop: always;
-  padding: 2rem 2rem 0 2rem;
+  padding: 2rem 1rem 0;
   gap: 1.5rem;
   overflow: hidden;
 }
 
 .about-content {
+  width: 100%;
   max-width: 480px;
   text-align: center;
-  align-self: center;
+  /* Auto top margin pushes about-content toward vertical centering while the
+     gallery's auto-top margin pulls it to the bottom: classic flex split. */
+  margin-top: auto;
+  padding: 0 0.5rem;
 }
 
 /* --- Help icon (fixed top-left) --- */
@@ -208,14 +214,16 @@ main {
 
 .hex-gallery {
   width: 100%;
-  align-self: center;
+  max-width: 100%;
+  min-width: 0;
+  /* Auto top margin pairs with about-content's margin-top: auto to push the
+     gallery to the bottom of the flex column. */
+  margin-top: auto;
   display: flex;
   justify-content: center;
-  align-items: center;
-  overflow: visible;
-  /* The grid is rotated; bake in some side padding so its corners don't
-     run into the section edge on narrow screens. */
-  padding: 0.5rem 1rem 1rem;
+  align-items: flex-end;
+  overflow: hidden;
+  padding: 0.5rem 0.5rem 1rem;
 }
 
 .hex-grid {
@@ -234,7 +242,10 @@ main {
   border: 0;
   padding: 0;
   cursor: pointer;
-  color: rgba(245, 243, 238, 0.55);  /* feeds .hex-border via currentColor */
+  /* Darker border tone so the outline reads as graphite/pencil against the
+     dimmed cream tile rather than blending with it. Feeds .hex-border via
+     currentColor. */
+  color: rgba(20, 20, 20, 0.65);
   font: inherit;
   display: block;
   transition: color 0.18s ease, transform 0.18s ease;
@@ -272,7 +283,7 @@ main {
 
 .hex-preview:hover,
 .hex-preview:focus-visible {
-  color: rgba(245, 243, 238, 1);
+  color: rgba(20, 20, 20, 0.95);
   transform: scale(1.06);
   z-index: 2;
 }

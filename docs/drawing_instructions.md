@@ -134,6 +134,12 @@ A black outlined square with a red diagonal line centered on the axis between th
 
 January 1973 · Black and red pencil
 
+### #1180
+
+Within a circle, draw 10,000 straight and not-straight lines.
+
+2005 · Black pencil
+
 ---
 
 ## Candidates (not yet implemented)
