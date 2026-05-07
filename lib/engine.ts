@@ -892,6 +892,58 @@ function handleSquareAndLine(
   }
 }
 
+function handleArchitecturalPoints(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'architectural-points')
+  if (!step) return
+
+  const includeCorners = (step.params.cornerPoints as boolean | undefined) ?? true
+  const includeMidpoints = (step.params.midpointPoints as boolean | undefined) ?? true
+  const featurePointCount = step.params.featurePointCount as { min: number; max: number } | undefined
+  const color = (step.params.color as string) || '#2554c7'
+  const strokeWidthRange = step.params.strokeWidth as { min: number; max: number } | undefined
+  const opacityRange = step.params.opacity as { min: number; max: number } | undefined
+
+  const points: [number, number][] = []
+
+  if (includeCorners) {
+    points.push([0, 0], [w, 0], [w, h], [0, h])
+  }
+
+  if (includeMidpoints) {
+    points.push([w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2])
+  }
+
+  if (featurePointCount) {
+    const n = Math.round(randRange(rand, featurePointCount))
+    for (let i = 0; i < n; i++) {
+      // Place each feature point on a random edge at a random position along it.
+      const edge = Math.floor(rand() * 4)
+      const t = rand()
+      switch (edge) {
+        case 0: points.push([t * w, 0]); break        // top
+        case 1: points.push([w, t * h]); break        // right
+        case 2: points.push([t * w, h]); break        // bottom
+        case 3: points.push([0, t * h]); break        // left
+      }
+    }
+  }
+
+  // Connect every pair of points with a straight line.
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      const width = strokeWidthRange ? randRange(rand, strokeWidthRange) : 0.6
+      const opacity = opacityRange ? randRange(rand, opacityRange) : 0.7
+      pushStroke(strokes, [points[i], points[j]], { color, width, opacity })
+    }
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -951,6 +1003,10 @@ export function generateStrokes(
 
   if (stepTypes.has('square-and-line')) {
     handleSquareAndLine(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('architectural-points')) {
+    handleArchitecturalPoints(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes

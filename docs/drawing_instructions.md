@@ -50,6 +50,12 @@ A wall divided into fifteen equal parts, each with a different line direction, a
 
 July 1970 · Black pencil
 
+### #51
+
+All architectural points connected by straight lines.
+
+May 1970 · Blue snap lines
+
 ### #56
 
 A square is divided horizontally and vertically into four equal parts, each with lines in four directions superimposed progressively.
@@ -127,14 +133,6 @@ January 1973 · Black and red pencil
 ## Candidates (not yet implemented)
 
 These are authentic LeWitt instructions sourced from museum collections — included as a backlog of next-up implementations. Each will need a step type in `lib/engine.ts` (some can reuse existing types).
-
-### #51
-
-All architectural points connected by straight lines.
-
-May 1970 · Blue snap lines
-
-> Reuses straight-line primitives. Needs a corner/edge "architectural point" generator and full-bipartite line emission.
 
 ### #65
 
