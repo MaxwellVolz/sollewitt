@@ -4,8 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { drawings } from '@/lib/drawings'
 import { HexPreview } from './HexPreview'
 
-const HEX_W_DESKTOP = 96
-const HEX_W_MOBILE = 64
+const HEX_W_DESKTOP = 128
+const HEX_W_MOBILE = 84
 
 // Deterministic string → integer hash so fall-in order can be randomized
 // without breaking SSR/hydration: server and client compute the same
