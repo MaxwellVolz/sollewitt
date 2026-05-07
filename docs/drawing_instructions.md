@@ -116,6 +116,18 @@ A 10-inch (25 cm) grid covering the wall. An increasing number of vertical not s
 
 August 1972 · Black pencil
 
+### #273
+
+A six-inch (15 cm) grid covering each of the four black walls. White lines to points on the grids. First wall: 24 lines from the center; second wall: 12 lines from the midpoint of each of the sides; third wall: 12 lines from each corner; fourth wall: 24 lines from the center, 12 lines from the midpoint of each of the sides, and 12 lines from each corner.
+
+August 1975 · White crayon on black walls
+
+### #289
+
+A 6-inch (15 cm) grid covering the wall. White lines to specific points on the grid.
+
+1976 · White crayon on black wall
+
 ### #154
 
 A black outlined square with a red horizontal line from the midpoint of the left side toward the middle of the right side.
