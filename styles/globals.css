@@ -152,9 +152,14 @@ main {
 
 /* About/Footer section */
 .about-section {
-  min-height: 100dvh;
+  position: relative;
+  /* Fixed height (not min-height) so the section never grows to fit gallery
+     content. Combined with overflow:hidden and minmax(0,...) on the rows,
+     this freezes the about-content's vertical position regardless of the
+     gallery's measured size after ResizeObserver settles. */
+  height: 100dvh;
   display: grid;
-  grid-template-rows: 2fr 1fr;
+  grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
   justify-items: center;
   background: var(--fg);
   color: var(--bg);
@@ -162,6 +167,7 @@ main {
   scroll-snap-stop: always;
   padding: 2rem 2rem 0 2rem;
   gap: 1.5rem;
+  overflow: hidden;
 }
 
 .about-content {
@@ -173,27 +179,27 @@ main {
 /* --- Help icon (fixed top-left) --- */
 
 .help-icon {
-  position: fixed;
+  /* Absolutely positioned inside the about-section so it scrolls away
+     with the header rather than persisting on screen across drawings. */
+  position: absolute;
   top: 1rem;
   left: 1rem;
-  z-index: 50;
+  z-index: 5;
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
   text-decoration: none;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
   transition: background 0.18s ease, transform 0.18s ease;
 }
 
 .help-icon:hover,
 .help-icon:focus-visible {
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(255, 255, 255, 0.22);
   transform: scale(1.06);
   outline: none;
 }

@@ -17,17 +17,17 @@ export function Gallery() {
 
   return (
     <>
-      <a
-        href="https://intervolz.com/developing-sollewitt/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="help-icon"
-        aria-label="How this was built"
-        title="how this was built"
-      >
-        <HelpCircle size={18} aria-hidden="true" />
-      </a>
       <section className="about-section">
+        <a
+          href="https://intervolz.com/developing-sollewitt/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="help-icon"
+          aria-label="How this was built"
+          title="how this was built"
+        >
+          <HelpCircle size={18} aria-hidden="true" />
+        </a>
         <div className="about-content">
           <h2>About This Project</h2>
           <p>
