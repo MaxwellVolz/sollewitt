@@ -15,7 +15,20 @@ export interface DrawingCanvasHandle {
 }
 
 function drawStroke(ctx: CanvasRenderingContext2D, stroke: StrokeElement) {
-  const { path, style } = stroke
+  const { path, style, text } = stroke
+
+  if (text) {
+    ctx.save()
+    ctx.globalAlpha = style.opacity
+    ctx.fillStyle = style.color
+    ctx.font = `${text.size}px var(--font-space-grotesk), sans-serif`
+    ctx.textAlign = text.align || 'left'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text.content, path[0][0], path[0][1])
+    ctx.restore()
+    return
+  }
+
   if (path.length < 2) return
 
   ctx.save()
