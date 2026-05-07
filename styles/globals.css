@@ -273,7 +273,13 @@ main {
      the full sequence runs ~3.5 seconds.
      Easing is a pure ease-out (no overshoot) so the settle is smooth
      rather than briefly springy. */
-  animation: hex-fall-in 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  /* fill-mode: backwards (not both/forwards). The "from" keyframe applies
+     during the staggered delay so unfallen tiles stay hidden, but the
+     settled state is the element's *base* style — leaving it free for
+     :hover to override transform/translateZ for the rise effect. With
+     "both" or "forwards", the animation's final keyframe sticks at higher
+     specificity than :hover and the rise silently does nothing. */
+  animation: hex-fall-in 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
   animation-delay: calc(var(--i, 0) * 130ms);
 }
 
