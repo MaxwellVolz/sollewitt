@@ -1088,6 +1088,78 @@ function handleCircleScatter(
   }
 }
 
+function handleImitativeBands(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'imitative-bands')
+  if (!step) return
+
+  const colors = (step.params.colors as string[]) || ['#1a1a1a', '#c23b22', '#e8a735', '#2554c7']
+  const verticalStep = (step.params.verticalStep as number) ?? 0.018
+  const initialWobble = (step.params.initialWobble as number) ?? 0.04
+  const driftAmount = (step.params.driftAmount as number) ?? 0.0035
+  const segmentsPerLine = (step.params.segmentsPerLine as number) ?? 80
+  const widthRange = step.params.strokeWidth as { min: number; max: number }
+  const opacityRange = step.params.opacity as { min: number; max: number }
+  const startY = (step.params.startY as number) ?? 0.04
+
+  const stepH = verticalStep * h
+  const initialAmp = initialWobble * h
+  const driftAmp = driftAmount * h
+  const topY = startY * h
+
+  // Generate the very first line (the "first drafter's" black mark) as a
+  // multi-point path with random vertical jitter at each control point.
+  let prevPath: [number, number][] = []
+  for (let s = 0; s <= segmentsPerLine; s++) {
+    const x = (s / segmentsPerLine) * w
+    const y = topY + (rand() - 0.5) * 2 * initialAmp
+    prevPath.push([x, y])
+  }
+
+  // Color rule from the instruction: first line is the seed color (black).
+  // After that, drafters 2/3/4 (red/yellow/blue) take turns copying the
+  // last line drawn — black is never used again.
+  const colorAt = (i: number) => i === 0 ? colors[0] : colors[1 + ((i - 1) % Math.max(1, colors.length - 1))]
+
+  // Emit the first line.
+  pushStroke(strokes, prevPath, {
+    color: colorAt(0),
+    width: randRange(rand, widthRange),
+    opacity: randRange(rand, opacityRange),
+  })
+
+  // Each subsequent line tries to copy its predecessor, shifted down one
+  // step plus a per-control-point drift.
+  let i = 1
+  while (true) {
+    const newPath: [number, number][] = []
+    let maxY = 0
+    for (let s = 0; s <= segmentsPerLine; s++) {
+      const [px, py] = prevPath[s]
+      const dy = stepH + (rand() - 0.5) * 2 * driftAmp
+      const ny = py + dy
+      newPath.push([px, ny])
+      if (ny > maxY) maxY = ny
+    }
+    if (maxY > h - topY * 0.5) break  // hit the bottom of the wall
+
+    pushStroke(strokes, newPath, {
+      color: colorAt(i),
+      width: randRange(rand, widthRange),
+      opacity: randRange(rand, opacityRange),
+    })
+
+    prevPath = newPath
+    i++
+    if (i > 500) break  // hard safety cap
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -1159,6 +1231,10 @@ export function generateStrokes(
 
   if (stepTypes.has('circle-scatter')) {
     handleCircleScatter(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('imitative-bands')) {
+    handleImitativeBands(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes
