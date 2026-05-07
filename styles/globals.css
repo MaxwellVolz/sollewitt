@@ -208,18 +208,24 @@ main {
 
 .hex-gallery {
   width: 100%;
-  align-self: start;
-  padding-bottom: 2rem;
+  align-self: center;
   display: flex;
   justify-content: center;
-  overflow-x: auto;
+  align-items: center;
+  overflow: visible;
+  /* The grid is rotated; bake in some side padding so its corners don't
+     run into the section edge on narrow screens. */
+  padding: 0.5rem 1rem 1rem;
 }
 
 .hex-grid {
-  /* Tile positions are computed in JS (HexGallery) and applied as inline
-     style on each .hex-preview. The container is a positioning context and
-     a hard size determined by the layout. */
+  /* Tile positions are computed in JS (HexGallery). The container is a
+     positioning context, sized by inline style. */
   position: relative;
+  /* Subtle rotation gives the index a less-clinical feel without
+     compromising the click target geometry. */
+  transform: rotate(-4deg);
+  transform-origin: center center;
 }
 
 .hex-preview {
@@ -228,9 +234,10 @@ main {
   border: 0;
   padding: 0;
   cursor: pointer;
-  color: inherit;
+  color: rgba(245, 243, 238, 0.55);  /* feeds .hex-border via currentColor */
   font: inherit;
   display: block;
+  transition: color 0.18s ease, transform 0.18s ease;
 }
 
 .hex-clip {
@@ -238,6 +245,9 @@ main {
   inset: 0;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
   background: var(--wall);
+  /* Default state: dimmed so the grid reads as an index, not as 21
+     competing artworks shouting next to the about content. */
+  filter: brightness(0.7) saturate(0.85);
   transition: filter 0.18s ease, transform 0.18s ease;
   overflow: hidden;
 }
@@ -250,10 +260,26 @@ main {
   display: block;
 }
 
+.hex-border {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: block;
+  overflow: visible;
+}
+
+.hex-preview:hover,
+.hex-preview:focus-visible {
+  color: rgba(245, 243, 238, 1);
+  transform: scale(1.06);
+  z-index: 2;
+}
+
 .hex-preview:hover .hex-clip,
 .hex-preview:focus-visible .hex-clip {
-  filter: brightness(1.05) saturate(1.1);
-  transform: scale(1.04);
+  filter: brightness(1) saturate(1.05);
 }
 
 .hex-preview:focus-visible {

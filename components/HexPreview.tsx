@@ -91,6 +91,15 @@ export function HexPreview({ instruction, index, style }: HexPreviewProps) {
       <div className="hex-clip">
         <canvas ref={canvasRef} />
       </div>
+      <svg className="hex-border" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <polygon
+          points="50,0 100,25 100,75 50,100 0,75 0,25"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
       <span className="hex-label">#{number}</span>
     </button>
   )
