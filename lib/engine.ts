@@ -1007,6 +1007,87 @@ function handleRandomWobbly(
   }
 }
 
+function handleCircleScatter(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'circle-scatter')
+  if (!step) return
+
+  const count = (step.params.count as number) || 10000
+  const straightRatio = (step.params.straightRatio as number) ?? 0.5
+  const lengthRange = step.params.lengthRatio as { min: number; max: number }
+  const wobbleRange = step.params.wobble as { min: number; max: number }
+  const segRange = step.params.segments as { min: number; max: number }
+  const widthRange = step.params.strokeWidth as { min: number; max: number }
+  const opacityRange = step.params.opacity as { min: number; max: number }
+  const color = (step.params.color as string) || '#222'
+  const circleFraction = (step.params.circleFraction as number) ?? 0.85
+  const drawBoundary = (step.params.drawBoundary as boolean | undefined) ?? true
+
+  const cx0 = w / 2
+  const cy0 = h / 2
+  const radius = (Math.min(w, h) / 2) * circleFraction
+  // Place each line's center inside an inner circle small enough that the
+  // line endpoints are guaranteed to land inside the outer (visible) circle.
+  const maxLength = lengthRange.max * radius * 2
+  const innerRadius = Math.max(0, radius - maxLength / 2)
+
+  if (drawBoundary) {
+    // Approximate the boundary circle with a many-segment polyline.
+    const segs = 96
+    const path: [number, number][] = []
+    for (let i = 0; i <= segs; i++) {
+      const a = (i / segs) * Math.PI * 2
+      path.push([cx0 + radius * Math.cos(a), cy0 + radius * Math.sin(a)])
+    }
+    pushStroke(strokes, path, { color, width: 1.5, opacity: 0.85 })
+  }
+
+  for (let i = 0; i < count; i++) {
+    // Sqrt-uniform polar sample → uniform area distribution inside circle.
+    const r = Math.sqrt(rand()) * innerRadius
+    const theta = rand() * Math.PI * 2
+    const cx = cx0 + r * Math.cos(theta)
+    const cy = cy0 + r * Math.sin(theta)
+
+    const orient = rand() * Math.PI * 2
+    const length = randRange(rand, lengthRange) * radius * 2
+    const dx = Math.cos(orient)
+    const dy = Math.sin(orient)
+    const x0 = cx - dx * length / 2
+    const y0 = cy - dy * length / 2
+
+    const isStraight = rand() < straightRatio
+    const path: [number, number][] = []
+
+    if (isStraight) {
+      path.push([x0, y0], [cx + dx * length / 2, cy + dy * length / 2])
+    } else {
+      const segments = Math.floor(randRange(rand, segRange))
+      const wobbleAmount = randRange(rand, wobbleRange) * radius
+      const px = -dy
+      const py = dx
+      for (let s = 0; s <= segments; s++) {
+        const t = s / segments
+        const onLineX = x0 + dx * length * t
+        const onLineY = y0 + dy * length * t
+        const wobble = (s === 0 || s === segments) ? 0 : (rand() - 0.5) * 2 * wobbleAmount
+        path.push([onLineX + px * wobble, onLineY + py * wobble])
+      }
+    }
+
+    pushStroke(strokes, path, {
+      color,
+      width: randRange(rand, widthRange),
+      opacity: randRange(rand, opacityRange),
+    })
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -1074,6 +1155,10 @@ export function generateStrokes(
 
   if (stepTypes.has('random-wobbly')) {
     handleRandomWobbly(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('circle-scatter')) {
+    handleCircleScatter(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes

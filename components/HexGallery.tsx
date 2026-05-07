@@ -17,7 +17,11 @@ export function HexGallery() {
     if (!el) return
 
     const compute = () => {
-      const w = el.clientWidth
+      // Clamp by both the container's measured width AND the viewport width.
+      // On mobile, the container can briefly report a desktop-sized width
+      // before flex layout settles, which would otherwise size the grid
+      // wider than the viewport.
+      const w = Math.min(el.clientWidth, window.innerWidth)
       const cellW = w < 640 ? HEX_W_MOBILE : HEX_W_DESKTOP
       // Allow half-hex of horizontal slack for the offset rows so they
       // don't overflow the container width.
