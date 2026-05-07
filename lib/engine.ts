@@ -1312,6 +1312,112 @@ function handleParallelLines(
   }
 }
 
+function handleLinesToGridPoints(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'lines-to-grid-points')
+  if (!step) return
+
+  type Panel = { anchors: ('center' | 'side-midpoints' | 'corners')[]; linesPerAnchor?: number }
+
+  const gridSize = (step.params.gridSize as number) ?? 0.05
+  const panels = (step.params.panels as Panel[]) || [{ anchors: ['center'], linesPerAnchor: 24 }]
+  const color = (step.params.color as string) || '#faf8f4'
+  const drawGrid = (step.params.drawGrid as boolean | undefined) ?? true
+  const lineOpacity = (step.params.lineOpacity as number) ?? 0.7
+  const lineWidth = (step.params.lineWidth as number) ?? 0.7
+  const drawDividers = panels.length > 1
+
+  const numPanels = panels.length
+  const panelW = w / numPanels
+
+  for (let p = 0; p < numPanels; p++) {
+    const panel = panels[p]
+    const px0 = p * panelW
+    const pw = panelW
+    const ph = h
+
+    const cellSize = gridSize * Math.min(pw, ph)
+    const cols = Math.max(2, Math.floor(pw / cellSize))
+    const rows = Math.max(2, Math.floor(ph / cellSize))
+    const stepX = pw / cols
+    const stepY = ph / rows
+
+    if (drawGrid) {
+      for (let gx = 0; gx <= cols; gx++) {
+        pushStroke(strokes, [[px0 + gx * stepX, 0], [px0 + gx * stepX, ph]], {
+          color,
+          width: 0.35,
+          opacity: 0.2,
+        })
+      }
+      for (let gy = 0; gy <= rows; gy++) {
+        pushStroke(strokes, [[px0, gy * stepY], [px0 + pw, gy * stepY]], {
+          color,
+          width: 0.35,
+          opacity: 0.2,
+        })
+      }
+    }
+
+    if (drawDividers && p > 0) {
+      pushStroke(strokes, [[px0, 0], [px0, h]], {
+        color,
+        width: 1,
+        opacity: 0.5,
+      })
+    }
+
+    const gridPoints: [number, number][] = []
+    for (let gy = 0; gy <= rows; gy++) {
+      for (let gx = 0; gx <= cols; gx++) {
+        gridPoints.push([px0 + gx * stepX, gy * stepY])
+      }
+    }
+
+    const linesPerAnchor = panel.linesPerAnchor ?? 12
+    for (const anchorType of panel.anchors) {
+      const anchors: [number, number][] = []
+      if (anchorType === 'center') {
+        anchors.push([px0 + pw / 2, ph / 2])
+      } else if (anchorType === 'side-midpoints') {
+        anchors.push(
+          [px0 + pw / 2, 0],
+          [px0 + pw, ph / 2],
+          [px0 + pw / 2, ph],
+          [px0, ph / 2],
+        )
+      } else if (anchorType === 'corners') {
+        anchors.push(
+          [px0, 0],
+          [px0 + pw, 0],
+          [px0 + pw, ph],
+          [px0, ph],
+        )
+      }
+
+      for (const anchor of anchors) {
+        const shuffled = shuffle([...gridPoints], rand)
+        const n = Math.min(linesPerAnchor, shuffled.length)
+        for (let i = 0; i < n; i++) {
+          const target = shuffled[i]
+          // Skip lines of zero length (anchor sits exactly on a grid point)
+          if (target[0] === anchor[0] && target[1] === anchor[1]) continue
+          pushStroke(strokes, [anchor, target], {
+            color,
+            width: lineWidth,
+            opacity: lineOpacity,
+          })
+        }
+      }
+    }
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -1395,6 +1501,10 @@ export function generateStrokes(
 
   if (stepTypes.has('parallel-lines')) {
     handleParallelLines(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('lines-to-grid-points')) {
+    handleLinesToGridPoints(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes
