@@ -134,6 +134,36 @@ A black outlined square with a red diagonal line centered on the axis between th
 
 January 1973 · Black and red pencil
 
+### #164
+
+A black outlined square with a red horizontal line from the midpoint of the right side toward the middle of the left side.
+
+January 1973 · Black and red pencil
+
+### #335
+
+White vertical parallel lines on four black walls.
+
+1977 · White crayon on black wall
+
+### #422
+
+A wall divided vertically into fifteen equal parts, each with a different line direction and color, and all combinations.
+
+1984 · Color ink wash
+
+### #630
+
+A wall divided horizontally into two parts. Each part with alternating black and white bands.
+
+1989 · Black and white paint
+
+### #631
+
+A wall divided diagonally into two parts. Each part with alternating black and white bands.
+
+1989 · Black and white paint
+
 ### #797
 
 The first drafter has a black marker and makes an irregular horizontal line near the top of the wall. Then the second drafter tries to copy it (without touching it) using a red marker. The third drafter does the same, using a yellow marker. The fourth drafter does the same using a blue marker. Then the second drafter, followed by the third and fourth, copy the last line drawn until the bottom of the wall is reached.

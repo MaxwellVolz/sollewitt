@@ -329,12 +329,39 @@ function handleCombinatorial(
 
   const allKinds = (step.params.lineKinds as LineKind[]) || []
   const density = step.params.density as { min: number; max: number }
+  const layout = (step.params.layout as 'rows' | 'strip') || 'rows'
+  const colors = step.params.colors as string[] | undefined
 
   // Generate all combinations: singles, pairs, triples, quadruple
   const singles = getCombinations(allKinds, 1) // 4 combinations
   const pairs = getCombinations(allKinds, 2) // 6 combinations
   const triples = getCombinations(allKinds, 3) // 4 combinations
   const quadruple = getCombinations(allKinds, 4) // 1 combination
+
+  if (layout === 'strip') {
+    // Single horizontal strip of 15 vertical columns, one combination per
+    // column. Used by #422 to lay out 4+6+4+1 = 15 unique combinations
+    // across the wall left-to-right with optional per-column colors.
+    const all = [...shuffle(singles, rand), ...shuffle(pairs, rand), ...shuffle(triples, rand), ...quadruple]
+    const cellW = w / all.length
+    for (let c = 0; c < all.length; c++) {
+      const x = c * cellW
+      const cellKinds = all[c]
+      const colColor = colors ? colors[c % colors.length] : '#222'
+      for (const kind of cellKinds) {
+        const count = Math.floor(randRange(rand, density))
+        const lines = generateLinesForCell(kind, x, 0, cellW, h, count)
+        for (const path of lines) {
+          pushStroke(strokes, path, {
+            color: colColor,
+            width: 0.5 + rand() * 1,
+            opacity: 0.45 + rand() * 0.4,
+          })
+        }
+      }
+    }
+    return
+  }
 
   // Row layout: [4 cells, 6 cells, 4 cells, 1 cell]
   const rows = [
@@ -1160,6 +1187,131 @@ function handleImitativeBands(
   }
 }
 
+function handleSolidBands(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'solid-bands')
+  if (!step) return
+
+  const direction = (step.params.direction as 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left') || 'horizontal'
+  const bandCount = (step.params.bandCount as number) || 8
+  const colors = (step.params.colors as string[]) || ['#1a1a1a', '#faf8f4']
+
+  const emitRect = (path: [number, number][], color: string) => {
+    pushStroke(strokes, path, { color, width: 0, opacity: 1 })
+  }
+
+  if (direction === 'horizontal') {
+    const bandH = h / bandCount
+    for (let i = 0; i < bandCount; i++) {
+      const y0 = i * bandH
+      const y1 = (i + 1) * bandH
+      const c = colors[i % colors.length]
+      emitRect([[0, y0], [w, y0], [w, y1], [0, y1], [0, y0]], c)
+    }
+  } else if (direction === 'vertical') {
+    const bandW = w / bandCount
+    for (let i = 0; i < bandCount; i++) {
+      const x0 = i * bandW
+      const x1 = (i + 1) * bandW
+      const c = colors[i % colors.length]
+      emitRect([[x0, 0], [x1, 0], [x1, h], [x0, h], [x0, 0]], c)
+    }
+  } else {
+    // Diagonal bands: tile along the diagonal axis perpendicular to the
+    // band direction. We emit each band as a parallelogram clipped to the
+    // wall rectangle. Approximate with a quad covering enough range.
+    const sign = direction === 'diagonal-right' ? 1 : -1
+    // Range of "perpendicular offset" along the axis perpendicular to bands.
+    // For diagonal-right (lines go down-right), the perpendicular is along
+    // the anti-diagonal. We sweep offsets from -h to w+h with bandCount steps.
+    const totalSpan = w + h
+    const bandSpan = totalSpan / bandCount
+    for (let i = 0; i < bandCount; i++) {
+      const c = colors[i % colors.length]
+      const t0 = i * bandSpan
+      const t1 = (i + 1) * bandSpan
+      // Build a parallelogram in canvas space:
+      //   For diagonal-right (slope +1): perpendicular axis is the anti-
+      //   diagonal. A band between offset t0 and t1 on the anti-diagonal,
+      //   extruded along the diagonal (which fills the wall at any offset),
+      //   yields four corners. In rectangle coords [0,w]×[0,h]:
+      //     Anti-diagonal coordinate u = x + y (range 0..w+h)
+      //     Each band is u ∈ [t0, t1].
+      //   The intersection of u=const line with the rect is a segment from
+      //   (max(0, u-h), min(u, h)) to (min(u, w), max(0, u-w)).
+      // Build a polygon by walking the rect boundary between u=t0 and u=t1.
+      const ud = sign === 1 ? (x: number, y: number) => x + y : (x: number, y: number) => (w - x) + y
+      const polyPoints: [number, number][] = []
+      // Walk rect corners and intersect with u=t0 and u=t1.
+      const corners: [number, number][] = [[0, 0], [w, 0], [w, h], [0, h]]
+      // Generate u=const intersection points with rect edges.
+      const edgeIntersections = (uTarget: number): [number, number][] => {
+        const pts: [number, number][] = []
+        for (let e = 0; e < 4; e++) {
+          const [ax, ay] = corners[e]
+          const [bx, by] = corners[(e + 1) % 4]
+          const ua = ud(ax, ay)
+          const ub = ud(bx, by)
+          if ((ua - uTarget) * (ub - uTarget) <= 0 && ua !== ub) {
+            const t = (uTarget - ua) / (ub - ua)
+            pts.push([ax + t * (bx - ax), ay + t * (by - ay)])
+          }
+        }
+        return pts
+      }
+      const lo = edgeIntersections(t0)
+      const hi = edgeIntersections(t1)
+      // Plus any rect corners with u in (t0, t1)
+      const insideCorners = corners.filter(([cx, cy]) => {
+        const u = ud(cx, cy)
+        return u > t0 && u < t1
+      })
+      const all = [...lo, ...insideCorners, ...hi]
+      if (all.length < 3) continue
+      // Sort by angle around centroid for a clean polygon
+      const cx = all.reduce((s, p) => s + p[0], 0) / all.length
+      const cy = all.reduce((s, p) => s + p[1], 0) / all.length
+      all.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx))
+      polyPoints.push(...all, all[0])
+      emitRect(polyPoints, c)
+    }
+  }
+}
+
+function handleParallelLines(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'parallel-lines')
+  if (!step) return
+
+  const direction = (step.params.direction as 'horizontal' | 'vertical') || 'vertical'
+  const count = (step.params.count as number) || 30
+  const color = (step.params.color as string) || '#faf8f4'
+  const widthRange = step.params.strokeWidth as { min: number; max: number } | undefined
+  const opacityRange = step.params.opacity as { min: number; max: number } | undefined
+
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count
+    const path: [number, number][] = direction === 'vertical'
+      ? [[t * w, 0], [t * w, h]]
+      : [[0, t * h], [w, t * h]]
+    pushStroke(strokes, path, {
+      color,
+      width: widthRange ? randRange(rand, widthRange) : 1,
+      opacity: opacityRange ? randRange(rand, opacityRange) : 0.9,
+    })
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -1235,6 +1387,14 @@ export function generateStrokes(
 
   if (stepTypes.has('imitative-bands')) {
     handleImitativeBands(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('solid-bands')) {
+    handleSolidBands(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('parallel-lines')) {
+    handleParallelLines(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes
