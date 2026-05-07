@@ -10,6 +10,14 @@ interface HexPreviewProps {
   style?: React.CSSProperties
 }
 
+// Virtual render size: each preview is generated at this resolution and
+// then scaled down to fit its hex tile via CSS. Rendering at the engine's
+// "natural" tuning size keeps line densities, stroke widths, and grid
+// spacings looking right — at the actual ~96px tile size, drawings tuned
+// for a full wall would otherwise be too dense or too sparse to read.
+const RENDER_W = 480
+const RENDER_H = Math.round(RENDER_W * (2 / Math.sqrt(3)))
+
 function drawAll(ctx: CanvasRenderingContext2D, strokes: StrokeElement[]) {
   for (const stroke of strokes) {
     const { path, style } = stroke
@@ -49,35 +57,20 @@ export function HexPreview({ instruction, index, style }: HexPreviewProps) {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const parent = canvas.parentElement
-    if (!parent) return
 
-    const render = () => {
-      const w = parent.clientWidth
-      const h = parent.clientHeight
-      if (w === 0 || h === 0) return
+    // Pixel buffer is the virtual render size; CSS sizes it to the tile.
+    canvas.width = RENDER_W
+    canvas.height = RENDER_H
 
-      const dpr = window.devicePixelRatio || 1
-      canvas.width = w * dpr
-      canvas.height = h * dpr
-      canvas.style.width = `${w}px`
-      canvas.style.height = `${h}px`
+    const ctx = canvas.getContext('2d')!
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.fillStyle = instruction.backgroundColor || '#ffffff'
+    ctx.fillRect(0, 0, RENDER_W, RENDER_H)
 
-      const ctx = canvas.getContext('2d')!
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-      ctx.fillStyle = instruction.backgroundColor || '#ffffff'
-      ctx.fillRect(0, 0, w, h)
-
-      // Deterministic seed per drawing so previews are stable across reloads.
-      const seed = (index + 1) * 1009
-      const strokes = generateStrokes(instruction, seed, w, h)
-      drawAll(ctx, strokes)
-    }
-
-    render()
-    const obs = new ResizeObserver(render)
-    obs.observe(parent)
-    return () => obs.disconnect()
+    // Deterministic seed per drawing so previews are stable across reloads.
+    const seed = (index + 1) * 1009
+    const strokes = generateStrokes(instruction, seed, RENDER_W, RENDER_H)
+    drawAll(ctx, strokes)
   }, [instruction, index])
 
   const handleClick = () => {

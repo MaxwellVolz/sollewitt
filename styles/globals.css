@@ -155,7 +155,6 @@ main {
   min-height: 100dvh;
   display: grid;
   grid-template-rows: 2fr 1fr;
-  align-items: center;
   justify-items: center;
   background: var(--fg);
   color: var(--bg);
@@ -168,7 +167,35 @@ main {
 .about-content {
   max-width: 480px;
   text-align: center;
-  align-self: end;
+  align-self: center;
+}
+
+/* --- Help icon (fixed top-left) --- */
+
+.help-icon {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 50;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+
+.help-icon:hover,
+.help-icon:focus-visible {
+  background: rgba(0, 0, 0, 0.85);
+  transform: scale(1.06);
+  outline: none;
 }
 
 /* --- Hex gallery (drawing index) --- */
@@ -211,9 +238,9 @@ main {
 
 .hex-clip canvas {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
 }
 

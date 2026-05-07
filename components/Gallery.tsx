@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { HelpCircle } from 'lucide-react'
 import { drawings } from '@/lib/drawings'
 import { WallSection } from './WallSection'
 import { HexGallery } from './HexGallery'
@@ -16,6 +17,16 @@ export function Gallery() {
 
   return (
     <>
+      <a
+        href="https://intervolz.com/developing-sollewitt/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="help-icon"
+        aria-label="How this was built"
+        title="how this was built"
+      >
+        <HelpCircle size={18} aria-hidden="true" />
+      </a>
       <section className="about-section">
         <div className="about-content">
           <h2>About This Project</h2>
@@ -27,9 +38,6 @@ export function Gallery() {
           <div className="about-links">
             <a href="https://massmoca.org/sol-lewitt/" target="_blank" rel="noopener noreferrer">
               Visit the Sol LeWitt collection at MASS MoCA →
-            </a>
-            <a href="https://intervolz.com/developing-sollewitt/" target="_blank" rel="noopener noreferrer">
-              Read about how this was built →
             </a>
           </div>
         </div>
