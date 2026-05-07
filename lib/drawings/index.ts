@@ -13,6 +13,7 @@ import { wallDrawing85 } from './wall-drawing-85'
 import { wallDrawing86 } from './wall-drawing-86'
 import { wallDrawing87 } from './wall-drawing-87'
 import { wallDrawing88 } from './wall-drawing-88'
+import { wallDrawing797 } from './wall-drawing-797'
 import { wallDrawing95 } from './wall-drawing-95'
 import { wallDrawing130 } from './wall-drawing-130'
 import { wallDrawing138 } from './wall-drawing-138'
@@ -44,5 +45,6 @@ export const drawings: DrawingInstruction[] = [
   wallDrawing154,
   wallDrawing159,
   wallDrawing160,
+  wallDrawing797,
   wallDrawing1180,
 ]
