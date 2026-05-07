@@ -153,19 +153,100 @@ main {
 /* About/Footer section */
 .about-section {
   min-height: 100dvh;
-  display: flex;
+  display: grid;
+  grid-template-rows: 2fr 1fr;
   align-items: center;
-  justify-content: center;
+  justify-items: center;
   background: var(--fg);
   color: var(--bg);
   scroll-snap-align: start;
   scroll-snap-stop: always;
-  padding: 2rem;
+  padding: 2rem 2rem 0 2rem;
+  gap: 1.5rem;
 }
 
 .about-content {
   max-width: 480px;
   text-align: center;
+  align-self: end;
+}
+
+/* --- Hex gallery (drawing index) --- */
+
+.hex-gallery {
+  width: 100%;
+  align-self: start;
+  padding-bottom: 2rem;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+}
+
+.hex-grid {
+  /* Tile positions are computed in JS (HexGallery) and applied as inline
+     style on each .hex-preview. The container is a positioning context and
+     a hard size determined by the layout. */
+  position: relative;
+}
+
+.hex-preview {
+  position: absolute;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: block;
+}
+
+.hex-clip {
+  position: absolute;
+  inset: 0;
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  background: var(--wall);
+  transition: filter 0.18s ease, transform 0.18s ease;
+  overflow: hidden;
+}
+
+.hex-clip canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: block;
+}
+
+.hex-preview:hover .hex-clip,
+.hex-preview:focus-visible .hex-clip {
+  filter: brightness(1.05) saturate(1.1);
+  transform: scale(1.04);
+}
+
+.hex-preview:focus-visible {
+  outline: none;
+}
+
+.hex-label {
+  position: absolute;
+  bottom: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--bg);
+  background: rgba(0, 0, 0, 0.65);
+  padding: 0.15rem 0.45rem;
+  border-radius: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.hex-preview:hover .hex-label,
+.hex-preview:focus-visible .hex-label {
+  opacity: 1;
 }
 
 .about-content h2 {

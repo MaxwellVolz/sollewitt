@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { drawings } from '@/lib/drawings'
 import { WallSection } from './WallSection'
+import { HexGallery } from './HexGallery'
 
 export function Gallery() {
   const [seeds, setSeeds] = useState<Record<string, number>>(() =>
@@ -32,6 +33,7 @@ export function Gallery() {
             </a>
           </div>
         </div>
+        <HexGallery />
       </section>
       {drawings.map((drawing) => (
         <WallSection

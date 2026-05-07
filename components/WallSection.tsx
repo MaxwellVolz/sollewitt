@@ -132,7 +132,7 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
   const drawingDone = hasPlayed && !isPlaying
 
   return (
-    <section className="wall-section" style={{ backgroundColor: instruction.backgroundColor || '#ffffff' }}>
+    <section id={instruction.id} className="wall-section" style={{ backgroundColor: instruction.backgroundColor || '#ffffff' }}>
       {showInstructions && (
         <div className={`instruction-header${fadeOut ? ' fade-out' : ''}`}>
           <span className="instruction-label">
