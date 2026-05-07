@@ -944,6 +944,69 @@ function handleArchitecturalPoints(
   }
 }
 
+function handleRandomWobbly(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'random-wobbly')
+  if (!step) return
+
+  const colors = (step.params.colors as string[]) || ['#222']
+  const count = Math.floor(randRange(rand, step.params.count as { min: number; max: number }))
+  const lengthRange = step.params.lengthRatio as { min: number; max: number }
+  const wobbleRange = step.params.wobble as { min: number; max: number }
+  const segRange = step.params.segments as { min: number; max: number }
+  const widthRange = step.params.strokeWidth as { min: number; max: number }
+  const opacityRange = step.params.opacity as { min: number; max: number }
+
+  const minDim = Math.min(w, h)
+
+  // Round-robin color assignment so each color is uniformly dispersed.
+  // Build a shuffled index sequence to keep the four streams interleaved
+  // visually rather than blocked by color.
+  const order: number[] = []
+  for (let i = 0; i < count; i++) order.push(i)
+  shuffle(order, rand)
+
+  for (let i = 0; i < count; i++) {
+    const color = colors[order[i] % colors.length]
+    const cx = rand() * w
+    const cy = rand() * h
+    const angle = rand() * Math.PI * 2
+    const length = randRange(rand, lengthRange) * minDim
+    const segments = Math.floor(randRange(rand, segRange))
+    const wobbleAmount = randRange(rand, wobbleRange) * minDim
+
+    const dx = Math.cos(angle)
+    const dy = Math.sin(angle)
+    // Perpendicular unit vector (rotated 90°)
+    const px = -dy
+    const py = dx
+
+    const x0 = cx - dx * length / 2
+    const y0 = cy - dy * length / 2
+
+    const path: [number, number][] = []
+    for (let s = 0; s <= segments; s++) {
+      const t = s / segments
+      const onLineX = x0 + dx * length * t
+      const onLineY = y0 + dy * length * t
+      // Endpoints stay anchored; only interior segments wobble.
+      const wobble = (s === 0 || s === segments) ? 0 : (rand() - 0.5) * 2 * wobbleAmount
+      path.push([onLineX + px * wobble, onLineY + py * wobble])
+    }
+
+    pushStroke(strokes, path, {
+      color,
+      width: randRange(rand, widthRange),
+      opacity: randRange(rand, opacityRange),
+    })
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -1007,6 +1070,10 @@ export function generateStrokes(
 
   if (stepTypes.has('architectural-points')) {
     handleArchitecturalPoints(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('random-wobbly')) {
+    handleRandomWobbly(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes
