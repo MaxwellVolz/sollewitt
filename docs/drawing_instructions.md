@@ -62,6 +62,12 @@ A square is divided horizontally and vertically into four equal parts, each with
 
 October 1970 · Black pencil
 
+### #65
+
+Lines not short, not straight, crossing and touching, drawn at random, using four colors, uniformly dispersed with maximum density, covering the entire surface of the wall.
+
+January 1971 · Red, yellow, blue, and black pencil
+
 ### #85
 
 A wall is divided into four horizontal parts. In the top row are four equal divisions, each with lines in a different direction. In the second row, six double combinations; in the third row, four triple combinations; in the bottom row, all four combinations superimposed.
@@ -133,14 +139,6 @@ January 1973 · Black and red pencil
 ## Candidates (not yet implemented)
 
 These are authentic LeWitt instructions sourced from museum collections — included as a backlog of next-up implementations. Each will need a step type in `lib/engine.ts` (some can reuse existing types).
-
-### #65
-
-Lines not short, not straight, crossing and touching, drawn at random, using four colors, uniformly dispersed with maximum density, covering the entire surface of the wall.
-
-January 1971 · Red, yellow, blue, and black pencil
-
-> Could extend `wobbly-lines` with multi-color uniform density and longer segment counts.
 
 ### #122
 
