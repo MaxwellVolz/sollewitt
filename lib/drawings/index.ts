@@ -22,8 +22,13 @@ import { wallDrawing154 } from './wall-drawing-154'
 import { wallDrawing159 } from './wall-drawing-159'
 import { wallDrawing160 } from './wall-drawing-160'
 import { wallDrawing164 } from './wall-drawing-164'
+import { wallDrawing237 } from './wall-drawing-237'
+import { wallDrawing238 } from './wall-drawing-238'
 import { wallDrawing273 } from './wall-drawing-273'
+import { wallDrawing274 } from './wall-drawing-274'
 import { wallDrawing289 } from './wall-drawing-289'
+import { wallDrawing295 } from './wall-drawing-295'
+import { wallDrawing305 } from './wall-drawing-305'
 import { wallDrawing335 } from './wall-drawing-335'
 import { wallDrawing422 } from './wall-drawing-422'
 import { wallDrawing630 } from './wall-drawing-630'
@@ -53,8 +58,13 @@ export const drawings: DrawingInstruction[] = [
   wallDrawing159,
   wallDrawing160,
   wallDrawing164,
+  wallDrawing237,
+  wallDrawing238,
   wallDrawing273,
+  wallDrawing274,
   wallDrawing289,
+  wallDrawing295,
+  wallDrawing305,
   wallDrawing335,
   wallDrawing422,
   wallDrawing630,

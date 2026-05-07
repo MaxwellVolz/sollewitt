@@ -17,7 +17,7 @@ export interface DrawingInstruction {
 }
 
 export interface DrawingStep {
-  type: 'divide' | 'lines' | 'arcs' | 'shapes' | 'fill' | 'bands' | 'pegboard' | 'wobbly-lines' | 'combinatorial' | 'scattered-lines' | 'grid-wobbly' | 'combinatorial-wobbly' | 'grid-and-arcs' | 'midpoint-arcs' | 'progressive-wobbly-grid' | 'square-and-line' | 'architectural-points' | 'random-wobbly' | 'circle-scatter' | 'imitative-bands' | 'solid-bands' | 'parallel-lines' | 'lines-to-grid-points'
+  type: 'divide' | 'lines' | 'arcs' | 'shapes' | 'fill' | 'bands' | 'pegboard' | 'wobbly-lines' | 'combinatorial' | 'scattered-lines' | 'grid-wobbly' | 'combinatorial-wobbly' | 'grid-and-arcs' | 'midpoint-arcs' | 'progressive-wobbly-grid' | 'square-and-line' | 'architectural-points' | 'random-wobbly' | 'circle-scatter' | 'imitative-bands' | 'solid-bands' | 'parallel-lines' | 'lines-to-grid-points' | 'labelled-shapes' | 'labelled-points'
   params: Record<string, unknown>
 }
 
@@ -33,4 +33,6 @@ export interface StrokeElement {
   path: [number, number][]
   style: StrokeStyle
   drawOrder: number
+  /** When present, the stroke renders as text at path[0] instead of a polyline. */
+  text?: { content: string; size: number; align?: CanvasTextAlign }
 }

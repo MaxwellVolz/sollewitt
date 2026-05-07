@@ -116,17 +116,47 @@ A 10-inch (25 cm) grid covering the wall. An increasing number of vertical not s
 
 August 1972 · Black pencil
 
+### #237
+
+The location of a trapezoid. (The trapezoid is located by a written sentence describing its corners geometrically.)
+
+June 1974 · Black pencil and crayon
+
+### #238
+
+The location of a parallelogram.
+
+June 1974 · Black pencil and crayon
+
 ### #273
 
 A six-inch (15 cm) grid covering each of the four black walls. White lines to points on the grids. First wall: 24 lines from the center; second wall: 12 lines from the midpoint of each of the sides; third wall: 12 lines from each corner; fourth wall: 24 lines from the center, 12 lines from the midpoint of each of the sides, and 12 lines from each corner.
 
 August 1975 · White crayon on black walls
 
+### #274
+
+The location of six geometric figures.
+
+September 1975 · Black pencil
+
 ### #289
 
 A 6-inch (15 cm) grid covering the wall. White lines to specific points on the grid.
 
 1976 · White crayon on black wall
+
+### #295
+
+Six white geometric figures on a black wall.
+
+October 1976 · White crayon on black wall
+
+### #305
+
+The location of one hundred random specific points. (Each point located by a written sentence describing it geometrically.)
+
+October 1976 · Black pencil
 
 ### #154
 
@@ -209,22 +239,6 @@ On black walls, all two-part combinations of white arcs from corners and sides, 
 July 1975 · White crayon on black walls
 
 > Variant of #122 with black ground. `backgroundColor: '#000'` plus white strokes.
-
-### #273
-
-A six-inch (15 cm) grid covering each of the four black walls. White lines to points on the grids. First wall: 24 lines from the center; second wall: 12 lines from the midpoint of each of the sides; third wall: 12 lines from each corner; fourth wall: 24 lines from the center, 12 lines from the midpoint of each of the sides, and 12 lines from each corner.
-
-August 1975 · White crayon on black walls
-
-> Four-section panel; could be presented as a four-cell `divide` with a custom `lines-to-points` step.
-
-### #305
-
-The location of one hundred random specific points. (Each point located by a written sentence describing it geometrically.)
-
-October 1976 · Black pencil
-
-> Conceptual outlier — the wall becomes a labelled point cloud. Engine would need a text-rendering primitive.
 
 ---
 

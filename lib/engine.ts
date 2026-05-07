@@ -82,6 +82,25 @@ function pushStroke(
   strokes.push({ id: order, path, style, drawOrder: order })
 }
 
+function pushText(
+  strokes: StrokeElement[],
+  position: [number, number],
+  content: string,
+  size: number,
+  color: string,
+  opacity: number,
+  align: CanvasTextAlign = 'left',
+): void {
+  const order = strokes.length
+  strokes.push({
+    id: order,
+    path: [position],
+    style: { color, width: 0, opacity },
+    drawOrder: order,
+    text: { content, size, align },
+  })
+}
+
 // --- Step handlers ---
 
 function handleDivideAndLines(
@@ -1418,6 +1437,174 @@ function handleLinesToGridPoints(
   }
 }
 
+// --- Labelled shapes (#237, #238, #274, #295) ---
+
+type ShapeKind = 'trapezoid' | 'parallelogram' | 'triangle' | 'rectangle' | 'rhombus' | 'pentagon' | 'hexagon' | 'square'
+
+function generateShape(
+  kind: ShapeKind,
+  rand: () => number,
+  cx: number,
+  cy: number,
+  size: number,
+): [number, number][] {
+  const points: [number, number][] = []
+  const r = size / 2
+  switch (kind) {
+    case 'square':
+      points.push([cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r])
+      break
+    case 'rectangle': {
+      const wf = r * (1 + rand() * 0.6)
+      const hf = r * (0.5 + rand() * 0.5)
+      points.push([cx - wf, cy - hf], [cx + wf, cy - hf], [cx + wf, cy + hf], [cx - wf, cy + hf])
+      break
+    }
+    case 'trapezoid': {
+      const top = r * (0.4 + rand() * 0.4)
+      const bot = r * (0.9 + rand() * 0.2)
+      const ht = r
+      points.push([cx - top, cy - ht], [cx + top, cy - ht], [cx + bot, cy + ht], [cx - bot, cy + ht])
+      break
+    }
+    case 'parallelogram': {
+      const skew = r * (0.3 + rand() * 0.4)
+      const wf = r * (0.9 + rand() * 0.2)
+      points.push([cx - wf + skew, cy - r], [cx + wf + skew, cy - r], [cx + wf - skew, cy + r], [cx - wf - skew, cy + r])
+      break
+    }
+    case 'triangle': {
+      points.push([cx, cy - r], [cx + r * 0.95, cy + r * 0.6], [cx - r * 0.95, cy + r * 0.6])
+      break
+    }
+    case 'rhombus':
+      points.push([cx, cy - r], [cx + r * 0.7, cy], [cx, cy + r], [cx - r * 0.7, cy])
+      break
+    case 'pentagon':
+    case 'hexagon': {
+      const sides = kind === 'pentagon' ? 5 : 6
+      const offset = kind === 'pentagon' ? -Math.PI / 2 : 0
+      for (let i = 0; i < sides; i++) {
+        const a = offset + (i / sides) * Math.PI * 2
+        points.push([cx + r * Math.cos(a), cy + r * Math.sin(a)])
+      }
+      break
+    }
+  }
+  // Close the polygon
+  points.push(points[0])
+  return points
+}
+
+function locationLabel(rand: () => number): string {
+  const fragments = [
+    'centered on the wall',
+    'in the upper left quadrant',
+    'in the upper right quadrant',
+    'in the lower left quadrant',
+    'in the lower right quadrant',
+    'between the center and the upper edge',
+    'between the center and the lower edge',
+    'between the center and the left edge',
+    'between the center and the right edge',
+  ]
+  return fragments[Math.floor(rand() * fragments.length)]
+}
+
+function handleLabelledShapes(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'labelled-shapes')
+  if (!step) return
+
+  const kinds = (step.params.kinds as ShapeKind[]) || ['trapezoid']
+  const showLabels = (step.params.showLabels as boolean | undefined) ?? true
+  const color = (step.params.color as string) || '#222'
+  const labelColor = (step.params.labelColor as string) || color
+  const lineWidth = (step.params.lineWidth as number) ?? 1.6
+  const labelSize = (step.params.labelSize as number) ?? 14
+
+  // Lay shapes out on a grid that fits the count.
+  const count = kinds.length
+  const cols = count <= 1 ? 1 : count <= 4 ? 2 : 3
+  const rows = Math.ceil(count / cols)
+  const cellW = w / cols
+  const cellH = h / rows
+  const shapeSize = Math.min(cellW, cellH) * 0.55
+
+  for (let i = 0; i < count; i++) {
+    const c = i % cols
+    const r = Math.floor(i / cols)
+    const cx = c * cellW + cellW / 2
+    const cy = r * cellH + cellH / 2
+    const path = generateShape(kinds[i], rand, cx, cy, shapeSize)
+    pushStroke(strokes, path, { color, width: lineWidth, opacity: 0.9 })
+    if (showLabels) {
+      pushText(
+        strokes,
+        [cx, cy + shapeSize / 2 + labelSize * 1.4],
+        kinds[i].toUpperCase() + ' ' + locationLabel(rand),
+        labelSize,
+        labelColor,
+        0.7,
+        'center',
+      )
+    }
+  }
+}
+
+function handleLabelledPoints(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'labelled-points')
+  if (!step) return
+
+  const count = (step.params.count as number) ?? 100
+  const color = (step.params.color as string) || '#222'
+  const dotRadius = (step.params.dotRadius as number) ?? 3
+  const labelSize = (step.params.labelSize as number) ?? 9
+  const margin = (step.params.margin as number) ?? 0.05
+
+  const xMin = margin * w
+  const yMin = margin * h
+  const xMax = (1 - margin) * w
+  const yMax = (1 - margin) * h
+
+  for (let i = 0; i < count; i++) {
+    const x = xMin + rand() * (xMax - xMin)
+    const y = yMin + rand() * (yMax - yMin)
+
+    // Dot: small filled square approximation via a closed-rect polygon.
+    pushStroke(strokes, [
+      [x - dotRadius, y - dotRadius],
+      [x + dotRadius, y - dotRadius],
+      [x + dotRadius, y + dotRadius],
+      [x - dotRadius, y + dotRadius],
+      [x - dotRadius, y - dotRadius],
+    ], { color, width: 0, opacity: 0.95 })
+
+    // Tiny number label next to each point so the "100 specific points"
+    // conceit reads at the wall scale.
+    pushText(
+      strokes,
+      [x + dotRadius * 2, y],
+      String(i + 1),
+      labelSize,
+      color,
+      0.7,
+      'left',
+    )
+  }
+}
+
 // --- Main entry ---
 
 export function generateStrokes(
@@ -1505,6 +1692,14 @@ export function generateStrokes(
 
   if (stepTypes.has('lines-to-grid-points')) {
     handleLinesToGridPoints(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('labelled-shapes')) {
+    handleLabelledShapes(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('labelled-points')) {
+    handleLabelledPoints(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes

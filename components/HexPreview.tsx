@@ -20,7 +20,20 @@ const RENDER_H = Math.round(RENDER_W * (2 / Math.sqrt(3)))
 
 function drawAll(ctx: CanvasRenderingContext2D, strokes: StrokeElement[]) {
   for (const stroke of strokes) {
-    const { path, style } = stroke
+    const { path, style, text } = stroke
+
+    if (text) {
+      ctx.save()
+      ctx.globalAlpha = style.opacity
+      ctx.fillStyle = style.color
+      ctx.font = `${text.size}px sans-serif`
+      ctx.textAlign = text.align || 'left'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(text.content, path[0][0], path[0][1])
+      ctx.restore()
+      continue
+    }
+
     if (path.length < 2) continue
 
     ctx.save()
