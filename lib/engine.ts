@@ -76,7 +76,7 @@ function generateLinesForCell(
 function pushStroke(
   strokes: StrokeElement[],
   path: [number, number][],
-  style: { color: string; width: number; opacity: number },
+  style: { color: string; width: number; opacity: number; mode?: 'stroke' | 'fill' | 'auto' },
 ): void {
   const order = strokes.length
   strokes.push({ id: order, path, style, drawOrder: order })
@@ -1213,91 +1213,199 @@ function handleSolidBands(
   h: number,
   strokes: StrokeElement[],
 ) {
-  const step = instruction.steps.find((s) => s.type === 'solid-bands')
-  if (!step) return
+  // Iterate every solid-bands step (instead of the first match) so a single
+  // drawing can stack multiple regions — e.g. #630 has horizontal bands in
+  // the top half and vertical bands in the bottom half.
+  const allSteps = instruction.steps.filter((s) => s.type === 'solid-bands')
+  if (allSteps.length === 0) return
 
-  const direction = (step.params.direction as 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left') || 'horizontal'
-  const bandCount = (step.params.bandCount as number) || 8
-  const colors = (step.params.colors as string[]) || ['#1a1a1a', '#faf8f4']
+  // Pick a single shared band thickness (in pixels) once per drawing when any
+  // step opts in via bandThicknessFrac or bandThicknessFracRange. All steps
+  // then use this same thickness, so #630's horizontal top bands and vertical
+  // bottom bands have identical pixel widths — matching LeWitt's "8-inch
+  // bands" rule that applies equally to both halves.
+  let sharedBandPx: number | null = null
+  for (const s of allSteps) {
+    const range = s.params.bandThicknessFracRange as { min: number; max: number } | undefined
+    if (range) {
+      sharedBandPx = (range.min + rand() * (range.max - range.min)) * w
+      break
+    }
+    const fixed = s.params.bandThicknessFrac as number | undefined
+    if (fixed != null) {
+      sharedBandPx = fixed * w
+      break
+    }
+  }
 
   const emitRect = (path: [number, number][], color: string) => {
     pushStroke(strokes, path, { color, width: 0, opacity: 1 })
   }
 
-  if (direction === 'horizontal') {
-    const bandH = h / bandCount
-    for (let i = 0; i < bandCount; i++) {
-      const y0 = i * bandH
-      const y1 = (i + 1) * bandH
-      const c = colors[i % colors.length]
-      emitRect([[0, y0], [w, y0], [w, y1], [0, y1], [0, y0]], c)
+  // Sutherland-Hodgman convex polygon clip. Used by `clipPolygon` to clip
+  // each band's parallelogram/rect to a triangular (or other convex) wall
+  // region — e.g. #631's two corner-to-corner triangular halves. Clip
+  // polygon must be wound so its interior is on the right of each directed
+  // edge (clockwise in screen coords with y down).
+  const clipConvex = (subjectClosed: [number, number][], clip: [number, number][]): [number, number][] => {
+    const isClosed = subjectClosed.length > 1
+      && subjectClosed[0][0] === subjectClosed[subjectClosed.length - 1][0]
+      && subjectClosed[0][1] === subjectClosed[subjectClosed.length - 1][1]
+    let output: [number, number][] = isClosed ? subjectClosed.slice(0, -1) : subjectClosed.slice()
+
+    const segIntersect = (p1: [number, number], p2: [number, number], q1: [number, number], q2: [number, number]): [number, number] => {
+      const x1 = p1[0], y1 = p1[1], x2 = p2[0], y2 = p2[1]
+      const x3 = q1[0], y3 = q1[1], x4 = q2[0], y4 = q2[1]
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+      if (denom === 0) return [p2[0], p2[1]]
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom
+      return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)]
     }
-  } else if (direction === 'vertical') {
-    const bandW = w / bandCount
-    for (let i = 0; i < bandCount; i++) {
-      const x0 = i * bandW
-      const x1 = (i + 1) * bandW
-      const c = colors[i % colors.length]
-      emitRect([[x0, 0], [x1, 0], [x1, h], [x0, h], [x0, 0]], c)
-    }
-  } else {
-    // Diagonal bands: tile along the diagonal axis perpendicular to the
-    // band direction. We emit each band as a parallelogram clipped to the
-    // wall rectangle. Approximate with a quad covering enough range.
-    const sign = direction === 'diagonal-right' ? 1 : -1
-    // Range of "perpendicular offset" along the axis perpendicular to bands.
-    // For diagonal-right (lines go down-right), the perpendicular is along
-    // the anti-diagonal. We sweep offsets from -h to w+h with bandCount steps.
-    const totalSpan = w + h
-    const bandSpan = totalSpan / bandCount
-    for (let i = 0; i < bandCount; i++) {
-      const c = colors[i % colors.length]
-      const t0 = i * bandSpan
-      const t1 = (i + 1) * bandSpan
-      // Build a parallelogram in canvas space:
-      //   For diagonal-right (slope +1): perpendicular axis is the anti-
-      //   diagonal. A band between offset t0 and t1 on the anti-diagonal,
-      //   extruded along the diagonal (which fills the wall at any offset),
-      //   yields four corners. In rectangle coords [0,w]×[0,h]:
-      //     Anti-diagonal coordinate u = x + y (range 0..w+h)
-      //     Each band is u ∈ [t0, t1].
-      //   The intersection of u=const line with the rect is a segment from
-      //   (max(0, u-h), min(u, h)) to (min(u, w), max(0, u-w)).
-      // Build a polygon by walking the rect boundary between u=t0 and u=t1.
-      const ud = sign === 1 ? (x: number, y: number) => x + y : (x: number, y: number) => (w - x) + y
-      const polyPoints: [number, number][] = []
-      // Walk rect corners and intersect with u=t0 and u=t1.
-      const corners: [number, number][] = [[0, 0], [w, 0], [w, h], [0, h]]
-      // Generate u=const intersection points with rect edges.
-      const edgeIntersections = (uTarget: number): [number, number][] => {
-        const pts: [number, number][] = []
-        for (let e = 0; e < 4; e++) {
-          const [ax, ay] = corners[e]
-          const [bx, by] = corners[(e + 1) % 4]
-          const ua = ud(ax, ay)
-          const ub = ud(bx, by)
-          if ((ua - uTarget) * (ub - uTarget) <= 0 && ua !== ub) {
-            const t = (uTarget - ua) / (ub - ua)
-            pts.push([ax + t * (bx - ax), ay + t * (by - ay)])
-          }
+
+    for (let e = 0; e < clip.length; e++) {
+      if (output.length === 0) break
+      const cp1 = clip[e]
+      const cp2 = clip[(e + 1) % clip.length]
+      const input = output
+      output = []
+      let s = input[input.length - 1]
+      for (const ep of input) {
+        const cE = (cp2[0] - cp1[0]) * (ep[1] - cp1[1]) - (cp2[1] - cp1[1]) * (ep[0] - cp1[0])
+        const cS = (cp2[0] - cp1[0]) * (s[1] - cp1[1]) - (cp2[1] - cp1[1]) * (s[0] - cp1[0])
+        const insideE = cE <= 0
+        const insideS = cS <= 0
+        if (insideE) {
+          if (!insideS) output.push(segIntersect(s, ep, cp1, cp2))
+          output.push(ep)
+        } else if (insideS) {
+          output.push(segIntersect(s, ep, cp1, cp2))
         }
-        return pts
+        s = ep
       }
-      const lo = edgeIntersections(t0)
-      const hi = edgeIntersections(t1)
-      // Plus any rect corners with u in (t0, t1)
-      const insideCorners = corners.filter(([cx, cy]) => {
-        const u = ud(cx, cy)
-        return u > t0 && u < t1
-      })
-      const all = [...lo, ...insideCorners, ...hi]
-      if (all.length < 3) continue
-      // Sort by angle around centroid for a clean polygon
-      const cx = all.reduce((s, p) => s + p[0], 0) / all.length
-      const cy = all.reduce((s, p) => s + p[1], 0) / all.length
-      all.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx))
-      polyPoints.push(...all, all[0])
-      emitRect(polyPoints, c)
+    }
+
+    if (output.length >= 3) output.push(output[0])
+    return output
+  }
+
+  for (const step of allSteps) {
+    const direction = (step.params.direction as 'horizontal' | 'vertical' | 'diagonal-right' | 'diagonal-left') || 'horizontal'
+    const colors = (step.params.colors as string[]) || ['#1a1a1a', '#faf8f4']
+    // LeWitt's instruction says "alternating" without specifying which color
+    // leads. When this flag is set, flip the order based on the seed so each
+    // region varies independently across rerolls.
+    const orderedColors = step.params.randomizeColorStart && rand() < 0.5
+      ? [...colors].reverse()
+      : colors
+
+    // Optional region: a sub-rectangle of the wall in relative coords
+    // (0..1). Defaults to the full wall when absent.
+    const region = (step.params.region as { x?: number; y?: number; w?: number; h?: number } | undefined) || {}
+    const rx = (region.x ?? 0) * w
+    const ry = (region.y ?? 0) * h
+    const rw = (region.w ?? 1) * w
+    const rh = (region.h ?? 1) * h
+
+    // Optional convex clip polygon in relative wall coords (0..1). When set,
+    // each band polygon is intersected with this shape. Used for non-rect
+    // halves like the corner-to-corner triangles in #631.
+    const clipPolyRel = step.params.clipPolygon as Array<[number, number]> | undefined
+    const clipPoly: [number, number][] | null = clipPolyRel
+      ? clipPolyRel.map(([px, py]) => [px * w, py * h] as [number, number])
+      : null
+
+    const emitBand = (rawPoly: [number, number][], color: string) => {
+      if (!clipPoly) {
+        emitRect(rawPoly, color)
+        return
+      }
+      const clipped = clipConvex(rawPoly, clipPoly)
+      if (clipped.length < 4) return
+      emitRect(clipped, color)
+    }
+
+    // When no shared thickness is set, fall back to per-step bandCount as
+    // before. Shared thickness mode derives the count from region extent so
+    // every band renders at exactly sharedBandPx.
+    const bandCountFallback = (step.params.bandCount as number) || 8
+
+    if (direction === 'horizontal') {
+      const bandH = sharedBandPx ?? (rh / bandCountFallback)
+      const bandCount = sharedBandPx != null
+        ? Math.max(1, Math.ceil(rh / bandH))
+        : bandCountFallback
+      for (let i = 0; i < bandCount; i++) {
+        const y0 = ry + i * bandH
+        if (y0 >= ry + rh) break
+        const y1 = Math.min(ry + (i + 1) * bandH, ry + rh)
+        const c = orderedColors[i % orderedColors.length]
+        emitBand([[rx, y0], [rx + rw, y0], [rx + rw, y1], [rx, y1], [rx, y0]], c)
+      }
+    } else if (direction === 'vertical') {
+      const bandW = sharedBandPx ?? (rw / bandCountFallback)
+      const bandCount = sharedBandPx != null
+        ? Math.max(1, Math.ceil(rw / bandW))
+        : bandCountFallback
+      for (let i = 0; i < bandCount; i++) {
+        const x0 = rx + i * bandW
+        if (x0 >= rx + rw) break
+        const x1 = Math.min(rx + (i + 1) * bandW, rx + rw)
+        const c = orderedColors[i % orderedColors.length]
+        emitBand([[x0, ry], [x1, ry], [x1, ry + rh], [x0, ry + rh], [x0, ry]], c)
+      }
+    } else {
+      // Diagonal bands: tile along the diagonal axis perpendicular to the
+      // band direction. We emit each band as a parallelogram clipped to the
+      // region rectangle. All math is in region-local coords [0..rw]×[0..rh],
+      // then translated by (rx, ry) on emit.
+      const sign = direction === 'diagonal-right' ? 1 : -1
+      const totalSpan = rw + rh
+      // For diagonal bands, sharedBandPx is measured perpendicular to the
+      // band edges (diagonal at 45° in unit space). The u-axis spans rw + rh,
+      // so a band of perpendicular thickness sharedBandPx corresponds to a
+      // u-axis span of sharedBandPx * sqrt(2).
+      const diagBandSpan = sharedBandPx != null ? sharedBandPx * Math.SQRT2 : null
+      const bandSpan = diagBandSpan ?? (totalSpan / bandCountFallback)
+      const bandCount = diagBandSpan != null
+        ? Math.max(1, Math.ceil(totalSpan / bandSpan))
+        : bandCountFallback
+      for (let i = 0; i < bandCount; i++) {
+        const c = orderedColors[i % orderedColors.length]
+        const t0 = i * bandSpan
+        const t1 = (i + 1) * bandSpan
+        const ud = sign === 1
+          ? (x: number, y: number) => x + y
+          : (x: number, y: number) => (rw - x) + y
+        const corners: [number, number][] = [[0, 0], [rw, 0], [rw, rh], [0, rh]]
+        const edgeIntersections = (uTarget: number): [number, number][] => {
+          const pts: [number, number][] = []
+          for (let e = 0; e < 4; e++) {
+            const [ax, ay] = corners[e]
+            const [bx, by] = corners[(e + 1) % 4]
+            const ua = ud(ax, ay)
+            const ub = ud(bx, by)
+            if ((ua - uTarget) * (ub - uTarget) <= 0 && ua !== ub) {
+              const t = (uTarget - ua) / (ub - ua)
+              pts.push([ax + t * (bx - ax), ay + t * (by - ay)])
+            }
+          }
+          return pts
+        }
+        const lo = edgeIntersections(t0)
+        const hi = edgeIntersections(t1)
+        const insideCorners = corners.filter(([cx, cy]) => {
+          const u = ud(cx, cy)
+          return u > t0 && u < t1
+        })
+        const all = [...lo, ...insideCorners, ...hi]
+        if (all.length < 3) continue
+        const cx = all.reduce((s, p) => s + p[0], 0) / all.length
+        const cy = all.reduce((s, p) => s + p[1], 0) / all.length
+        all.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx))
+        const polyPoints: [number, number][] = all.map(([x, y]) => [x + rx, y + ry])
+        polyPoints.push(polyPoints[0])
+        emitBand(polyPoints, c)
+      }
     }
   }
 }
@@ -1441,6 +1549,59 @@ function handleLinesToGridPoints(
 
 type ShapeKind = 'trapezoid' | 'parallelogram' | 'triangle' | 'rectangle' | 'rhombus' | 'pentagon' | 'hexagon' | 'square'
 
+// Single-letter codes for construction-line labels (LeWitt #274 documentation
+// mode). Each line on the wall reads as e.g. "R12" — rectangle, group 1, line 2.
+const SHAPE_LETTERS: Record<ShapeKind, string> = {
+  rectangle: 'R',
+  triangle: 'T',
+  trapezoid: 'Z',
+  parallelogram: 'P',
+  rhombus: 'M',
+  pentagon: 'G',
+  hexagon: 'H',
+  square: 'S',
+}
+
+// LeWitt's geometric lexicon: each wall has nine reference points — four
+// corners, four side midpoints, and the center. Construction lines are
+// drawn between these.
+function wallAnchors(w: number, h: number): [number, number][] {
+  return [
+    [0, 0], [w, 0], [w, h], [0, h],
+    [w / 2, 0], [w, h / 2], [w / 2, h], [0, h / 2],
+    [w / 2, h / 2],
+  ]
+}
+
+// Build a construction line: pick a wall anchor, then draw the line from
+// that anchor through the shape's center, extended to the far wall edge.
+// Guarantees every construction line visually passes through the shape it
+// helps locate.
+function constructionLine(
+  cx: number,
+  cy: number,
+  w: number,
+  h: number,
+  rand: () => number,
+): [[number, number], [number, number]] {
+  const anchors = wallAnchors(w, h)
+  const a = anchors[Math.floor(rand() * anchors.length)]
+  const dx = cx - a[0]
+  const dy = cy - a[1]
+  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return [a, [cx, cy]]
+
+  // Find the largest t such that (a.x + t·dx, a.y + t·dy) stays inside the
+  // wall rectangle. Beyond t=1 we're past the shape's center and continuing
+  // outward; we want to terminate at the far wall edge.
+  const ts: number[] = []
+  if (dx > 1e-9) ts.push((w - a[0]) / dx)
+  else if (dx < -1e-9) ts.push(-a[0] / dx)
+  if (dy > 1e-9) ts.push((h - a[1]) / dy)
+  else if (dy < -1e-9) ts.push(-a[1] / dy)
+  const tMax = ts.length ? Math.min(...ts) : 1
+  return [a, [a[0] + tMax * dx, a[1] + tMax * dy]]
+}
+
 function generateShape(
   kind: ShapeKind,
   rand: () => number,
@@ -1511,6 +1672,61 @@ function locationLabel(rand: () => number): string {
   return fragments[Math.floor(rand() * fragments.length)]
 }
 
+// Scanline hatch fill for a polygon. Returns line segments inside the polygon
+// at the given angle (radians) and spacing. Uses the standard rotate-fill-
+// unrotate trick: rotate polygon by -angle so scanlines are axis-aligned,
+// emit horizontal segments between odd/even edge crossings, rotate back.
+function hatchFillPolygon(
+  poly: [number, number][],
+  spacing: number,
+  angle: number,
+): [number, number][][] {
+  // De-duplicate the closing point if present, otherwise the (last,first)
+  // edge has zero length and contributes garbage to the crossings.
+  const open = poly.length > 1 && poly[0][0] === poly[poly.length - 1][0] && poly[0][1] === poly[poly.length - 1][1]
+    ? poly.slice(0, -1)
+    : poly
+  if (open.length < 3) return []
+
+  const cosN = Math.cos(-angle)
+  const sinN = Math.sin(-angle)
+  const cosP = Math.cos(angle)
+  const sinP = Math.sin(angle)
+  const rotN = (p: [number, number]): [number, number] => [p[0] * cosN - p[1] * sinN, p[0] * sinN + p[1] * cosN]
+  const rotP = (p: [number, number]): [number, number] => [p[0] * cosP - p[1] * sinP, p[0] * sinP + p[1] * cosP]
+
+  const rotated = open.map(rotN)
+
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const p of rotated) {
+    if (p[1] < minY) minY = p[1]
+    if (p[1] > maxY) maxY = p[1]
+  }
+
+  const segments: [number, number][][] = []
+  const startY = Math.ceil(minY / spacing) * spacing
+
+  for (let y = startY; y <= maxY; y += spacing) {
+    const xs: number[] = []
+    for (let i = 0; i < rotated.length; i++) {
+      const a = rotated[i]
+      const b = rotated[(i + 1) % rotated.length]
+      // Half-open scanline rule: vertex on the lower edge counts, upper does
+      // not. Avoids double-counting at shared vertices.
+      if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y)) {
+        const t = (y - a[1]) / (b[1] - a[1])
+        xs.push(a[0] + t * (b[0] - a[0]))
+      }
+    }
+    xs.sort((p, q) => p - q)
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      segments.push([rotP([xs[i], y]), rotP([xs[i + 1], y])])
+    }
+  }
+  return segments
+}
+
 function handleLabelledShapes(
   instruction: DrawingInstruction,
   rand: () => number,
@@ -1527,22 +1743,105 @@ function handleLabelledShapes(
   const labelColor = (step.params.labelColor as string) || color
   const lineWidth = (step.params.lineWidth as number) ?? 1.6
   const labelSize = (step.params.labelSize as number) ?? 14
+  // 'outline' (default) — closed polygon outline only (LeWitt #237/#238).
+  // 'solid'   — filled polygon (no outline emphasis needed).
+  // 'lines'   — outline + crayon-style hatch fill inside (LeWitt #274/#295).
+  const fillStyle = (step.params.fillStyle as 'outline' | 'solid' | 'lines' | undefined) ?? 'outline'
+  const fillColors = (step.params.fillColors as string[] | undefined) ?? [color]
+  const hatchSpacing = (step.params.hatchSpacing as number | undefined) ?? Math.max(4, Math.min(w, h) / 90)
+  const hatchAngles = (step.params.hatchAngles as number[] | undefined) ?? [Math.PI / 4]
+  const hatchWidth = (step.params.hatchWidth as number | undefined) ?? 1.0
+  const hatchOpacity = (step.params.hatchOpacity as number | undefined) ?? 0.85
+  // Stack all shapes at the wall center, layered (LeWitt #295 superimposed).
+  const superimposed = (step.params.superimposed as boolean | undefined) ?? false
 
-  // Lay shapes out on a grid that fits the count.
+  // Construction-line documentation mode (LeWitt #274). Every line on the
+  // wall reads as e.g. "R12" — rectangle, group 1, line 2 — turning the
+  // wall into its own wiring diagram.
+  const showConstructionLines = (step.params.showConstructionLines as boolean | undefined) ?? false
+  const constructionGroups = (step.params.constructionGroups as number | undefined) ?? 2
+  const constructionLinesPerGroup = (step.params.constructionLinesPerGroup as number | undefined) ?? 2
+  const constructionColor = (step.params.constructionColor as string | undefined) ?? '#7a7a7a'
+  const constructionLabelColor = (step.params.constructionLabelColor as string | undefined) ?? '#444'
+  const constructionLineWidth = (step.params.constructionLineWidth as number | undefined) ?? 0.5
+  const constructionOpacity = (step.params.constructionOpacity as number | undefined) ?? 0.42
+  const constructionLabelSize = (step.params.constructionLabelSize as number | undefined) ?? 10
+
   const count = kinds.length
-  const cols = count <= 1 ? 1 : count <= 4 ? 2 : 3
-  const rows = Math.ceil(count / cols)
-  const cellW = w / cols
-  const cellH = h / rows
-  const shapeSize = Math.min(cellW, cellH) * 0.55
 
   for (let i = 0; i < count; i++) {
-    const c = i % cols
-    const r = Math.floor(i / cols)
-    const cx = c * cellW + cellW / 2
-    const cy = r * cellH + cellH / 2
+    let cx: number
+    let cy: number
+    let shapeSize: number
+
+    if (superimposed) {
+      // All shapes share the wall center; size them so overlaps read.
+      cx = w / 2
+      cy = h / 2
+      shapeSize = Math.min(w, h) * 0.7
+    } else {
+      const cols = count <= 1 ? 1 : count <= 4 ? 2 : 3
+      const cellW = w / cols
+      const cellH = h / Math.ceil(count / cols)
+      const c = i % cols
+      const r = Math.floor(i / cols)
+      cx = c * cellW + cellW / 2
+      cy = r * cellH + cellH / 2
+      shapeSize = Math.min(cellW, cellH) * 0.55
+    }
+
     const path = generateShape(kinds[i], rand, cx, cy, shapeSize)
-    pushStroke(strokes, path, { color, width: lineWidth, opacity: 0.9 })
+    const fillColor = fillColors[i % fillColors.length]
+
+    // Emit construction lines per shape FIRST so they sit underneath the
+    // shape outline and hatch in paint order. Each line reads from a wall
+    // anchor (corner / midpoint / center) through the shape's center to
+    // the far wall edge, with a small alphanumeric label at one third
+    // along its length.
+    if (showConstructionLines) {
+      const letter = SHAPE_LETTERS[kinds[i]] ?? 'X'
+      for (let g = 1; g <= constructionGroups; g++) {
+        for (let l = 1; l <= constructionLinesPerGroup; l++) {
+          const [a, b] = constructionLine(cx, cy, w, h, rand)
+          pushStroke(strokes, [a, b], {
+            color: constructionColor,
+            width: constructionLineWidth,
+            opacity: constructionOpacity,
+          })
+          // Label at a randomized t along the line — staggered placements
+          // keep adjacent labels from stacking on top of each other.
+          const t = 0.18 + rand() * 0.55
+          const lx = a[0] + (b[0] - a[0]) * t
+          const ly = a[1] + (b[1] - a[1]) * t
+          pushText(
+            strokes,
+            [lx, ly],
+            `${letter}${g}${l}`,
+            constructionLabelSize,
+            constructionLabelColor,
+            0.85,
+            'center',
+          )
+        }
+      }
+    }
+
+    if (fillStyle === 'lines') {
+      // Outlined polygon (mode='stroke' overrides the auto-fill for closed
+      // paths) plus hatched interior in the per-shape crayon color.
+      pushStroke(strokes, path, { color, width: lineWidth, opacity: 0.9, mode: 'stroke' })
+      for (const angle of hatchAngles) {
+        const segs = hatchFillPolygon(path, hatchSpacing, angle)
+        for (const seg of segs) {
+          pushStroke(strokes, seg, { color: fillColor, width: hatchWidth, opacity: hatchOpacity })
+        }
+      }
+    } else if (fillStyle === 'outline') {
+      pushStroke(strokes, path, { color, width: lineWidth, opacity: 0.9, mode: 'stroke' })
+    } else {
+      pushStroke(strokes, path, { color, width: lineWidth, opacity: 0.9 })
+    }
+
     if (showLabels) {
       pushText(
         strokes,
@@ -1573,35 +1872,433 @@ function handleLabelledPoints(
   const labelSize = (step.params.labelSize as number) ?? 9
   const margin = (step.params.margin as number) ?? 0.05
 
+  // LeWitt's "geometric lexicon" for #305: nine reference points formed by
+  // the four corners, four side midpoints, and center of the wall. Each
+  // point in the drawing is constructed from these references via one of:
+  //   - the reference itself                                        (9)
+  //   - halfway between two distinct references                     (36)
+  //   - 1/3 of the way from A toward B, ordered                     (72)
+  //   - 1/4 of the way from A toward B, ordered                     (72)
+  //   - halfway between A and the midpoint of two other refs        (252)
+  // Total: 441 unique constructions. We shuffle, take `count` (100), and
+  // place each label with a greedy collision-avoidance pass so neighbouring
+  // labels can't visually overlap.
+  type Ref = { rx: number; ry: number; name: string }
+  const refs: Ref[] = [
+    { rx: 0, ry: 0, name: 'top left corner' },
+    { rx: 1, ry: 0, name: 'top right corner' },
+    { rx: 0, ry: 1, name: 'bottom left corner' },
+    { rx: 1, ry: 1, name: 'bottom right corner' },
+    { rx: 0.5, ry: 0, name: 'midpoint of top side' },
+    { rx: 0.5, ry: 1, name: 'midpoint of bottom side' },
+    { rx: 0, ry: 0.5, name: 'midpoint of left side' },
+    { rx: 1, ry: 0.5, name: 'midpoint of right side' },
+    { rx: 0.5, ry: 0.5, name: 'center of wall' },
+  ]
+
+  type Construction = { rx: number; ry: number; name: string }
+  const lex: Construction[] = []
+
+  for (const r of refs) {
+    lex.push({ rx: r.rx, ry: r.ry, name: `the ${r.name}` })
+  }
+
+  for (let i = 0; i < refs.length; i++) {
+    for (let j = i + 1; j < refs.length; j++) {
+      const a = refs[i]
+      const b = refs[j]
+      lex.push({
+        rx: (a.rx + b.rx) / 2,
+        ry: (a.ry + b.ry) / 2,
+        name: `halfway between the ${a.name} and the ${b.name}`,
+      })
+    }
+  }
+
+  const fracs: Array<{ t: number; phrase: string }> = [
+    { t: 1 / 3, phrase: 'one third' },
+    { t: 1 / 4, phrase: 'one quarter' },
+  ]
+  for (const { t, phrase } of fracs) {
+    for (let i = 0; i < refs.length; i++) {
+      for (let j = 0; j < refs.length; j++) {
+        if (i === j) continue
+        const a = refs[i]
+        const b = refs[j]
+        lex.push({
+          rx: a.rx * (1 - t) + b.rx * t,
+          ry: a.ry * (1 - t) + b.ry * t,
+          name: `${phrase} of the way from the ${a.name} toward the ${b.name}`,
+        })
+      }
+    }
+  }
+
+  // Depth-2: halfway between an anchor and a midpoint of two other refs.
+  //   point = (A + (B+C)/2) / 2
+  for (let i = 0; i < refs.length; i++) {
+    for (let j = 0; j < refs.length; j++) {
+      if (j === i) continue
+      for (let k = j + 1; k < refs.length; k++) {
+        if (k === i) continue
+        const A = refs[i]
+        const B = refs[j]
+        const C = refs[k]
+        const mx = (B.rx + C.rx) / 2
+        const my = (B.ry + C.ry) / 2
+        lex.push({
+          rx: (A.rx + mx) / 2,
+          ry: (A.ry + my) / 2,
+          name: `halfway between the ${A.name} and a point halfway between the ${B.name} and the ${C.name}`,
+        })
+      }
+    }
+  }
+
+  // Fisher-Yates shuffle so the seed determines which subset we pick.
+  for (let i = lex.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[lex[i], lex[j]] = [lex[j], lex[i]]
+  }
+
+  const picked = lex.slice(0, Math.min(count, lex.length))
+  // Sort spatially so #1 is the top-left-most point and #100 is the bottom-
+  // right-most. Sequential numbering follows reading order, which matches the
+  // top-to-bottom timeline reveal and lets viewers trace the points easily.
+  picked.sort((a, b) => a.ry - b.ry || a.rx - b.rx)
+
   const xMin = margin * w
   const yMin = margin * h
-  const xMax = (1 - margin) * w
-  const yMax = (1 - margin) * h
+  const xRange = (1 - 2 * margin) * w
+  const yRange = (1 - 2 * margin) * h
 
-  for (let i = 0; i < count; i++) {
-    const x = xMin + rand() * (xMax - xMin)
-    const y = yMin + rand() * (yMax - yMin)
+  type Box = { x0: number; y0: number; x1: number; y1: number }
+  const charW = labelSize * 0.52
+  const lineH = labelSize * 1.2
+  const dotPad = dotRadius + 4
 
-    // Dot: small filled square approximation via a closed-rect polygon.
+  // Pre-compute every dot position and prefix the description with its
+  // spatial number ("#42 halfway between..."). Pre-computing every dot box
+  // upfront lets each label avoid every dot — not just labels placed so far —
+  // so a label can never end up drawn on top of an unrelated dot it would
+  // otherwise meet later in the loop.
+  type Point = { x: number; y: number; text: string; lw: number; dotBox: Box }
+  const points: Point[] = picked.map((p, i) => {
+    const x = xMin + p.rx * xRange
+    const y = yMin + p.ry * yRange
+    const text = `#${i + 1} ${p.name}`
+    return {
+      x,
+      y,
+      text,
+      lw: text.length * charW,
+      dotBox: {
+        x0: x - dotRadius - 2,
+        y0: y - dotRadius - 2,
+        x1: x + dotRadius + 2,
+        y1: y + dotRadius + 2,
+      },
+    }
+  })
+
+  // occupied seeds with every dot box, then accumulates label boxes as we
+  // place them. Labels avoid both.
+  const occupied: Box[] = points.map((pp) => pp.dotBox)
+
+  for (const pp of points) {
     pushStroke(strokes, [
-      [x - dotRadius, y - dotRadius],
-      [x + dotRadius, y - dotRadius],
-      [x + dotRadius, y + dotRadius],
-      [x - dotRadius, y + dotRadius],
-      [x - dotRadius, y - dotRadius],
+      [pp.x - dotRadius, pp.y - dotRadius],
+      [pp.x + dotRadius, pp.y - dotRadius],
+      [pp.x + dotRadius, pp.y + dotRadius],
+      [pp.x - dotRadius, pp.y + dotRadius],
+      [pp.x - dotRadius, pp.y - dotRadius],
     ], { color, width: 0, opacity: 0.95 })
 
-    // Tiny number label next to each point so the "100 specific points"
-    // conceit reads at the wall scale.
+    const lw = pp.lw
+    const lh = lineH
+
+    // Candidate offsets for a label, in priority order. Tried in turn; the
+    // first clean fit wins. If none fit cleanly, the candidate with the
+    // smallest overlap is used as a graceful fallback (instead of slamming
+    // it down on the first slot like the old code).
+    const candidates: Array<{ ox: number; oy: number }> = [
+      // Primary axis stacks (most legible — directly above/below the dot)
+      { ox: 0, oy: dotPad + lh / 2 },
+      { ox: 0, oy: -(dotPad + lh / 2) },
+      { ox: 0, oy: dotPad + lh * 1.6 },
+      { ox: 0, oy: -(dotPad + lh * 1.6) },
+      { ox: 0, oy: dotPad + lh * 2.7 },
+      { ox: 0, oy: -(dotPad + lh * 2.7) },
+      { ox: 0, oy: dotPad + lh * 3.8 },
+      { ox: 0, oy: -(dotPad + lh * 3.8) },
+      // Direct sides
+      { ox: lw / 2 + dotPad, oy: 0 },
+      { ox: -(lw / 2 + dotPad), oy: 0 },
+      // Diagonal nudges, primary distance
+      { ox: lw / 2 + dotPad, oy: dotPad + lh / 2 },
+      { ox: -(lw / 2 + dotPad), oy: dotPad + lh / 2 },
+      { ox: lw / 2 + dotPad, oy: -(dotPad + lh / 2) },
+      { ox: -(lw / 2 + dotPad), oy: -(dotPad + lh / 2) },
+      // Diagonal nudges, extended distance
+      { ox: lw / 2 + dotPad, oy: dotPad + lh * 1.6 },
+      { ox: -(lw / 2 + dotPad), oy: dotPad + lh * 1.6 },
+      { ox: lw / 2 + dotPad, oy: -(dotPad + lh * 1.6) },
+      { ox: -(lw / 2 + dotPad), oy: -(dotPad + lh * 1.6) },
+      // Half-shifted horizontals — sometimes thread between a tight pair of
+      // labels above/below by sliding the center off-axis without going
+      // fully sideways.
+      { ox: lw / 4, oy: dotPad + lh / 2 },
+      { ox: -lw / 4, oy: dotPad + lh / 2 },
+      { ox: lw / 4, oy: -(dotPad + lh / 2) },
+      { ox: -lw / 4, oy: -(dotPad + lh / 2) },
+    ]
+
+    let chosenBox: Box | null = null
+    let chosenOx = candidates[0].ox
+    let chosenOy = candidates[0].oy
+    let bestOverlap = Infinity
+    let bestBox: Box | null = null
+    let bestOx = candidates[0].ox
+    let bestOy = candidates[0].oy
+
+    for (const c of candidates) {
+      const cx = pp.x + c.ox
+      const cy = pp.y + c.oy
+      const box: Box = { x0: cx - lw / 2, y0: cy - lh / 2, x1: cx + lw / 2, y1: cy + lh / 2 }
+      if (box.x0 < 0 || box.x1 > w || box.y0 < 0 || box.y1 > h) continue
+
+      let overlap = 0
+      for (const pb of occupied) {
+        const ow = Math.min(box.x1, pb.x1) - Math.max(box.x0, pb.x0)
+        const oh = Math.min(box.y1, pb.y1) - Math.max(box.y0, pb.y0)
+        if (ow > 0 && oh > 0) overlap += ow * oh
+      }
+
+      if (overlap === 0) {
+        chosenBox = box
+        chosenOx = c.ox
+        chosenOy = c.oy
+        break
+      }
+      if (overlap < bestOverlap) {
+        bestOverlap = overlap
+        bestBox = box
+        bestOx = c.ox
+        bestOy = c.oy
+      }
+    }
+
+    if (!chosenBox) {
+      if (bestBox) {
+        chosenBox = bestBox
+        chosenOx = bestOx
+        chosenOy = bestOy
+      } else {
+        // Every candidate was off-canvas — fall back to the primary slot.
+        const cx = pp.x + chosenOx
+        const cy = pp.y + chosenOy
+        chosenBox = { x0: cx - lw / 2, y0: cy - lh / 2, x1: cx + lw / 2, y1: cy + lh / 2 }
+      }
+    }
+    occupied.push(chosenBox)
+
     pushText(
       strokes,
-      [x + dotRadius * 2, y],
-      String(i + 1),
+      [pp.x + chosenOx, pp.y + chosenOy],
+      pp.text,
       labelSize,
       color,
       0.7,
-      'left',
+      'center',
     )
+  }
+}
+
+function handleWallsWithFigures(
+  instruction: DrawingInstruction,
+  rand: () => number,
+  w: number,
+  h: number,
+  strokes: StrokeElement[],
+) {
+  const step = instruction.steps.find((s) => s.type === 'walls-with-figures')
+  if (!step) return
+
+  const lineColor = (step.params.lineColor as string) || '#f4f1ea'
+  const bgCount = (step.params.bgLineCount as number) ?? 60
+  const bgWidthRange = (step.params.bgStrokeWidth as { min: number; max: number }) ?? { min: 0.7, max: 1.4 }
+  const bgOpacityRange = (step.params.bgOpacity as { min: number; max: number }) ?? { min: 0.6, max: 0.9 }
+  const figureNames = (step.params.figures as string[]) ?? ['square', 'circle', 'triangle', 'cross', 'x', 'diamond', 'hexagon', 'trapezoid']
+  const cols = (step.params.cols as number) ?? 4
+  const rows = (step.params.rows as number) ?? 2
+  const figureSizeFrac = (step.params.figureSizeFrac as number) ?? 0.13
+  const figureGapFrac = (step.params.figureGapFrac as number) ?? 0.5
+  const figureLineDensity = (step.params.figureLineDensity as number) ?? 9
+  const outlineWidth = (step.params.outlineWidth as number) ?? 1.4
+  // Spacing jitter: each line shifts within its slot by up to ±jitter/2 of the
+  // slot width. 0 = perfectly even (the old behavior). Values in [0, 0.8]
+  // stay collision-free. Hand-painted lines on LeWitt's actual installations
+  // were never perfectly equidistant, so a little jitter reads as authentic.
+  const bgSpacingJitter = (step.params.bgSpacingJitter as number) ?? 0
+  const figureSpacingJitter = (step.params.figureSpacingJitter as number) ?? 0
+
+  // Unit shape templates centered at origin within a [-0.5, 0.5] bbox.
+  const t = 0.18
+  const greekCross: [number, number][] = [
+    [-t, -0.5], [t, -0.5], [t, -t], [0.5, -t], [0.5, t], [t, t],
+    [t, 0.5], [-t, 0.5], [-t, t], [-0.5, t], [-0.5, -t], [-t, -t],
+  ]
+  const c45 = Math.cos(Math.PI / 4)
+  const s45 = Math.sin(Math.PI / 4)
+  const xShape: [number, number][] = greekCross.map(([x, y]) => [x * c45 - y * s45, x * s45 + y * c45])
+
+  const shapes: Record<string, [number, number][]> = {
+    square: [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]],
+    triangle: [[0, -0.5], [0.5, 0.4], [-0.5, 0.4]],
+    circle: Array.from({ length: 36 }, (_, i) => {
+      const a = (i / 36) * Math.PI * 2
+      return [Math.cos(a) * 0.5, Math.sin(a) * 0.5] as [number, number]
+    }),
+    cross: greekCross,
+    x: xShape,
+    diamond: [[0, -0.5], [0.5, 0], [0, 0.5], [-0.5, 0]],
+    hexagon: Array.from({ length: 6 }, (_, i) => {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2
+      return [Math.cos(a) * 0.5, Math.sin(a) * 0.5] as [number, number]
+    }),
+    trapezoid: [[-0.5, 0.4], [-0.3, -0.4], [0.3, -0.4], [0.5, 0.4]],
+    pentagon: Array.from({ length: 5 }, (_, i) => {
+      const a = (i / 5) * Math.PI * 2 - Math.PI / 2
+      return [Math.cos(a) * 0.5, Math.sin(a) * 0.5] as [number, number]
+    }),
+    octagon: Array.from({ length: 8 }, (_, i) => {
+      const a = (i / 8) * Math.PI * 2 - Math.PI / 8
+      return [Math.cos(a) * 0.5, Math.sin(a) * 0.5] as [number, number]
+    }),
+  }
+
+  // Lay figures out in a grid centered on the wall. The requested size is
+  // figureSizeFrac × min(wallW, wallH); we auto-shrink (preserving the
+  // requested gap-to-size ratio) if that pushes the grid past 90% of either
+  // wall dimension. This lets the configured sizeFrac stay generous on
+  // desktop without overflowing on narrow mobile walls.
+  const requested = figureSizeFrac * Math.min(w, h)
+  const reqPitch = requested * (1 + figureGapFrac)
+  const reqGridW = (cols - 1) * reqPitch + requested
+  const reqGridH = (rows - 1) * reqPitch + requested
+  const fit = Math.min(1, (0.9 * w) / reqGridW, (0.9 * h) / reqGridH)
+  const figureSize = requested * fit
+  const cellPitch = figureSize * (1 + figureGapFrac)
+  const gridW = (cols - 1) * cellPitch + figureSize
+  const gridH = (rows - 1) * cellPitch + figureSize
+  const gridX0 = (w - gridW) / 2 + figureSize / 2
+  const gridY0 = (h - gridH) / 2 + figureSize / 2
+
+  const placedFigures: Array<{ name: string; poly: [number, number][] }> = []
+  for (let i = 0; i < figureNames.length && i < cols * rows; i++) {
+    const name = figureNames[i]
+    const tmpl = shapes[name]
+    if (!tmpl) continue
+    const r = Math.floor(i / cols)
+    const cIdx = i % cols
+    const cx = gridX0 + cIdx * cellPitch
+    const cy = gridY0 + r * cellPitch
+    const poly = tmpl.map(([px, py]) => [cx + px * figureSize, cy + py * figureSize] as [number, number])
+    placedFigures.push({ name, poly })
+  }
+
+  const unionIntervals = (ivs: Array<[number, number]>): Array<[number, number]> => {
+    if (ivs.length === 0) return []
+    const sorted = ivs.map((iv) => [iv[0], iv[1]] as [number, number]).sort((a, b) => a[0] - b[0])
+    const out: Array<[number, number]> = [sorted[0]]
+    for (let i = 1; i < sorted.length; i++) {
+      const last = out[out.length - 1]
+      if (sorted[i][0] <= last[1]) {
+        last[1] = Math.max(last[1], sorted[i][1])
+      } else {
+        out.push(sorted[i])
+      }
+    }
+    return out
+  }
+
+  const complement = (inside: Array<[number, number]>, lo: number, hi: number): Array<[number, number]> => {
+    const out: Array<[number, number]> = []
+    let cursor = lo
+    for (const iv of inside) {
+      if (iv[0] > cursor) out.push([cursor, iv[0]])
+      cursor = Math.max(cursor, iv[1])
+    }
+    if (cursor < hi) out.push([cursor, hi])
+    return out
+  }
+
+  // Crossings of axis-aligned line with a polygon. axis 'x' = vertical line
+  // at x=v, returns ys; axis 'y' = horizontal line at y=v, returns xs.
+  const crossings = (poly: [number, number][], v: number, axis: 'x' | 'y'): Array<[number, number]> => {
+    const ts: number[] = []
+    const idx = axis === 'x' ? 0 : 1
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i]
+      const b = poly[(i + 1) % poly.length]
+      const av = a[idx]
+      const bv = b[idx]
+      if ((av - v) * (bv - v) < 0 && av !== bv) {
+        const tInterp = (v - av) / (bv - av)
+        const other = a[1 - idx] + tInterp * (b[1 - idx] - a[1 - idx])
+        ts.push(other)
+      }
+    }
+    ts.sort((a, b) => a - b)
+    const ivs: Array<[number, number]> = []
+    for (let i = 0; i + 1 < ts.length; i += 2) ivs.push([ts[i], ts[i + 1]])
+    return ivs
+  }
+
+  // 1) Background vertical lines, clipped to OUTSIDE all figures.
+  for (let i = 0; i < bgCount; i++) {
+    const jitter = bgSpacingJitter * (rand() - 0.5)
+    const tFrac = (i + 0.5 + jitter) / bgCount
+    const xv = tFrac * w
+    const allInside: Array<[number, number]> = []
+    for (const fig of placedFigures) {
+      for (const iv of crossings(fig.poly, xv, 'x')) allInside.push(iv)
+    }
+    const inside = unionIntervals(allInside)
+    const segs = complement(inside, 0, h)
+    const sw = randRange(rand, bgWidthRange)
+    const op = randRange(rand, bgOpacityRange)
+    for (const [y0, y1] of segs) {
+      pushStroke(strokes, [[xv, y0], [xv, y1]], { color: lineColor, width: sw, opacity: op })
+    }
+  }
+
+  // 2) For each figure, draw its outline then horizontal lines INSIDE.
+  for (const fig of placedFigures) {
+    const closed: [number, number][] = [...fig.poly, fig.poly[0]]
+    pushStroke(strokes, closed, {
+      color: lineColor,
+      width: outlineWidth,
+      opacity: 0.95,
+      mode: 'stroke',
+    })
+
+    const ys = fig.poly.map((p) => p[1])
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    const figH = maxY - minY
+    const lineCount = Math.max(2, Math.round(figH / (figureSize / figureLineDensity)))
+    for (let j = 0; j < lineCount; j++) {
+      const jitter = figureSpacingJitter * (rand() - 0.5)
+      const tFrac = (j + 0.5 + jitter) / lineCount
+      const yh = minY + tFrac * figH
+      const xivs = crossings(fig.poly, yh, 'y')
+      const sw = randRange(rand, bgWidthRange)
+      const op = randRange(rand, bgOpacityRange)
+      for (const [x0, x1] of xivs) {
+        pushStroke(strokes, [[x0, yh], [x1, yh]], { color: lineColor, width: sw, opacity: op })
+      }
+    }
   }
 }
 
@@ -1700,6 +2397,10 @@ export function generateStrokes(
 
   if (stepTypes.has('labelled-points')) {
     handleLabelledPoints(instruction, rand, canvasWidth, canvasHeight, strokes)
+  }
+
+  if (stepTypes.has('walls-with-figures')) {
+    handleWallsWithFigures(instruction, rand, canvasWidth, canvasHeight, strokes)
   }
 
   return strokes

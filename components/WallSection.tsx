@@ -14,6 +14,25 @@ interface WallSectionProps {
 
 const PLAY_DURATION = 5000
 
+// Returns true when the section's background is dark/mid enough that the
+// default muted-gray instruction text would fail contrast against it.
+// Threshold deliberately on the high side so mid-gray backgrounds (like the
+// #b0b0b0 pegboard wall) also flip to the light text palette.
+function isDimBackground(color: string | undefined): boolean {
+  if (!color) return false
+  const m = color.trim().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i)
+  if (!m) return false
+  const hex = m[1]
+  const expand = hex.length === 3
+    ? hex.split('').map((c) => c + c).join('')
+    : hex
+  const r = parseInt(expand.slice(0, 2), 16)
+  const g = parseInt(expand.slice(2, 4), 16)
+  const b = parseInt(expand.slice(4, 6), 16)
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return lum < 0.85
+}
+
 export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [hasPlayed, setHasPlayed] = useState(false)
@@ -130,9 +149,14 @@ export function WallSection({ instruction, seed, onReroll }: WallSectionProps) {
   }, [instruction.backgroundColor, instruction.id, instruction.title, seed])
 
   const drawingDone = hasPlayed && !isPlaying
+  const dimBg = isDimBackground(instruction.backgroundColor)
 
   return (
-    <section id={instruction.id} className="wall-section" style={{ backgroundColor: instruction.backgroundColor || '#ffffff' }}>
+    <section
+      id={instruction.id}
+      className={`wall-section${dimBg ? ' wall-section--dim' : ''}`}
+      style={{ backgroundColor: instruction.backgroundColor || '#ffffff' }}
+    >
       {showInstructions && (
         <div className={`instruction-header${fadeOut ? ' fade-out' : ''}`}>
           <span className="instruction-label">

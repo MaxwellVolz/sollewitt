@@ -150,6 +150,23 @@ main {
   opacity: 0.75;
 }
 
+/* Dark/mid backgrounds (e.g. black-wall and gray-pegboard drawings) need
+   inverted instruction text to stay legible. Detected per-section in JS
+   from instruction.backgroundColor (luminance threshold ~0.85). */
+.wall-section--dim .instruction-label {
+  color: #f4f1ea;
+}
+
+.wall-section--dim .instruction-subtitle {
+  /* Higher than default --muted to keep contrast on near-black walls. */
+  color: rgba(244, 241, 234, 0.82);
+}
+
+.wall-section--dim .create-button {
+  background: #f4f1ea;
+  color: #0e0e0e;
+}
+
 /* About/Footer section */
 .about-section {
   position: relative;
@@ -162,12 +179,16 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   background: var(--fg);
   color: var(--bg);
   scroll-snap-align: start;
   scroll-snap-stop: always;
-  padding: 2rem 1rem 0;
+  /* Fixed top padding pins about-content at a stable y position regardless
+     of how tall the hex gallery measures out to. Previously we used
+     justify-content: center + margin-top: auto on both children, which
+     redistributed leftover space whenever the gallery measured differently
+     after mount — visibly sliding about-content downward. */
+  padding: 12vh 1rem 1rem;
   gap: 1.5rem;
   overflow: hidden;
 }
@@ -176,10 +197,10 @@ main {
   width: 100%;
   max-width: 480px;
   text-align: center;
-  /* Auto top margin pushes about-content toward vertical centering while the
-     gallery's auto-top margin pulls it to the bottom: classic flex split. */
-  margin-top: auto;
   padding: 0 0.5rem;
+  /* No auto-margin: y position is fixed by the section's padding-top so
+     the hex-gallery's measured-vs-default height delta can't shift this. */
+  flex-shrink: 0;
 }
 
 /* --- Help icon (fixed top-left) --- */
@@ -216,8 +237,10 @@ main {
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  /* Auto top margin pairs with about-content's margin-top: auto to push the
-     gallery to the bottom of the flex column. */
+  /* Auto top margin pulls the gallery to the bottom of the about-section
+     flex column. About-content has fixed top padding (no auto margin) so
+     this margin only pushes against the section padding — about-content's
+     y position stays put even when the gallery's measured height changes. */
   margin-top: auto;
   display: flex;
   justify-content: center;
@@ -261,38 +284,35 @@ main {
   font: inherit;
   display: block;
   transform-style: preserve-3d;
-  /* Hint GPU compositor promotion for both the entrance animation and any
-     hover-driven transform. Without this, 22 simultaneously-animating 3D
-     elements sometimes fall back to CPU paint and stutter. */
-  will-change: transform, opacity;
   backface-visibility: hidden;
   transition: color 0.22s ease, transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
   /* Each tile drops in from above and forward of the plane at mount,
-     staggered by index so the grid assembles itself one cell at a time
-     over a few seconds. With 22 tiles × 130ms stagger + 0.85s duration,
-     the full sequence runs ~3.5 seconds.
-     Easing is a pure ease-out (no overshoot) so the settle is smooth
-     rather than briefly springy. */
-  /* fill-mode: backwards (not both/forwards). The "from" keyframe applies
+     staggered by index. With 35 tiles × 50ms stagger + 0.55s duration,
+     the full sequence settles in ~2.3 seconds — half the previous time.
+     Smaller Z/Y travel distances also cut compositor overdraw per layer.
+     fill-mode: backwards (not both/forwards). The "from" keyframe applies
      during the staggered delay so unfallen tiles stay hidden, but the
      settled state is the element's *base* style — leaving it free for
-     :hover to override transform/translateZ for the rise effect. With
-     "both" or "forwards", the animation's final keyframe sticks at higher
-     specificity than :hover and the rise silently does nothing. */
-  animation: hex-fall-in 0.85s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
-  animation-delay: calc(var(--i, 0) * 130ms);
+     :hover to override transform/translateZ for the rise effect. */
+  animation: hex-fall-in 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
+  animation-delay: calc(var(--i, 0) * 50ms);
+  /* will-change ONLY during the entrance animation. The browser auto-
+     promotes during the active animation window; setting it permanently
+     pinned 35 GPU layers for the lifetime of the page (visible CPU/GPU
+     drain even at idle). Hover gets its own targeted will-change below. */
 }
 
 @keyframes hex-fall-in {
   from {
     opacity: 0;
-    transform: translate3d(0, -120px, 240px);
+    transform: translate3d(0, -70px, 140px);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
 }
+
 
 .hex-clip {
   position: absolute;
@@ -331,9 +351,12 @@ main {
      gallery, translateZ is real depth — the hovered tile rises toward
      the viewer above its neighbors. The negative Y nudge exaggerates the
      "lifting off the table" read. z-index: 10 is a belt-and-braces stack
-     guarantee for browsers that prefer painters-algorithm over depth. */
+     guarantee for browsers that prefer painters-algorithm over depth.
+     will-change here (rather than on the base rule) keeps GPU promotion
+     scoped to the actively-hovered tile instead of pinning 35 layers. */
   transform: translate3d(0, -8px, 70px);
   z-index: 10;
+  will-change: transform;
 }
 
 .hex-preview:hover .hex-clip,
@@ -420,6 +443,28 @@ main {
   .instruction-subtitle {
     font-size: 0.9rem;
     max-width: none;
+  }
+
+  /* Mobile: vertically center the about-content; let the hex-gallery bleed
+     past the viewport edges (110vw) without displacing the text. The
+     hex-gallery is taken out of flex flow so its measured height can't
+     redistribute space against the centered text above. body's
+     overflow-x: hidden contains the horizontal bleed. */
+  .about-section {
+    justify-content: center;
+    padding: 1rem;
+    overflow: visible;
+  }
+
+  .hex-gallery {
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 110vw;
+    max-width: 110vw;
+    margin-top: 0;
+    padding: 1rem 0 0.5rem;
   }
 
   .about-content p {

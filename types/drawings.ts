@@ -4,6 +4,11 @@ export type StrokeStyle = {
   color: string
   width: number
   opacity: number
+  /** Override the auto-detect (closed → fill, open → stroke). Used when an
+   * outlined polygon should NOT be filled (e.g. hatched shapes whose closing
+   * edge is needed for the outline but whose interior is filled by separate
+   * hatch strokes). */
+  mode?: 'stroke' | 'fill' | 'auto'
 }
 
 export interface DrawingInstruction {
@@ -17,7 +22,7 @@ export interface DrawingInstruction {
 }
 
 export interface DrawingStep {
-  type: 'divide' | 'lines' | 'arcs' | 'shapes' | 'fill' | 'bands' | 'pegboard' | 'wobbly-lines' | 'combinatorial' | 'scattered-lines' | 'grid-wobbly' | 'combinatorial-wobbly' | 'grid-and-arcs' | 'midpoint-arcs' | 'progressive-wobbly-grid' | 'square-and-line' | 'architectural-points' | 'random-wobbly' | 'circle-scatter' | 'imitative-bands' | 'solid-bands' | 'parallel-lines' | 'lines-to-grid-points' | 'labelled-shapes' | 'labelled-points'
+  type: 'divide' | 'lines' | 'arcs' | 'shapes' | 'fill' | 'bands' | 'pegboard' | 'wobbly-lines' | 'combinatorial' | 'scattered-lines' | 'grid-wobbly' | 'combinatorial-wobbly' | 'grid-and-arcs' | 'midpoint-arcs' | 'progressive-wobbly-grid' | 'square-and-line' | 'architectural-points' | 'random-wobbly' | 'circle-scatter' | 'imitative-bands' | 'solid-bands' | 'parallel-lines' | 'lines-to-grid-points' | 'labelled-shapes' | 'labelled-points' | 'walls-with-figures'
   params: Record<string, unknown>
 }
 

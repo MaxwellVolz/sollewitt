@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { drawings } from '@/lib/drawings'
 import { HexPreview } from './HexPreview'
 
@@ -19,10 +19,19 @@ function hashCode(s: string): number {
   return h >>> 0
 }
 
+function computeDims(width: number) {
+  const cellW = width < 640 ? HEX_W_MOBILE : HEX_W_DESKTOP
+  const fit = Math.max(1, Math.floor((width - cellW * 0.5) / cellW))
+  return { cols: fit, hexW: cellW }
+}
+
 export function HexGallery() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [cols, setCols] = useState(8)
-  const [hexW, setHexW] = useState(HEX_W_DESKTOP)
+  // Default to desktop sizing so SSR and the first client paint produce
+  // identical markup. Real measurement happens in useLayoutEffect before
+  // the browser paints, so the user never sees this default.
+  const [{ cols, hexW }, setDims] = useState(() => ({ cols: 8, hexW: HEX_W_DESKTOP }))
+  const [measured, setMeasured] = useState(false)
 
   // Shuffle the fall-in order by sorting indices by a stable hash of each
   // drawing's id. The mapping is array-position → fall-order-rank, so a
@@ -37,25 +46,29 @@ export function HexGallery() {
     return order
   }, [])
 
-  useEffect(() => {
+  // useLayoutEffect runs synchronously after the DOM is committed but
+  // before the browser paints — so the user only ever sees the corrected
+  // measurement, never the SSR default. Without this, the grid paints
+  // once at the default size, then snaps to the measured size on the
+  // next frame: the visible jitter the user reported.
+  useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
 
     const compute = () => {
-      // Clamp by both the container's measured width AND the viewport width.
-      // On mobile, the container can briefly report a desktop-sized width
-      // before flex layout settles, which would otherwise size the grid
-      // wider than the viewport.
-      const w = Math.min(el.clientWidth, window.innerWidth)
-      const cellW = w < 640 ? HEX_W_MOBILE : HEX_W_DESKTOP
-      // Allow half-hex of horizontal slack for the offset rows so they
-      // don't overflow the container width.
-      const fit = Math.max(1, Math.floor((w - cellW * 0.5) / cellW))
-      setCols(fit)
-      setHexW(cellW)
+      // Trust the container's measured width up to a sane multiple of the
+      // viewport. Mobile uses an explicit 110vw container (1.1× innerWidth)
+      // to bleed past the viewport edges, so the previous strict
+      // Math.min(clientWidth, innerWidth) clamp would clip the bleed to
+      // 100vw. The 1.2× cap still catches the original failure mode (a
+      // pre-settle desktop-sized clientWidth on a mobile viewport).
+      const w = Math.min(el.clientWidth, window.innerWidth * 1.2)
+      const next = computeDims(w)
+      setDims((prev) => (prev.cols === next.cols && prev.hexW === next.hexW ? prev : next))
     }
 
     compute()
+    setMeasured(true)
     const obs = new ResizeObserver(compute)
     obs.observe(el)
     return () => obs.disconnect()
@@ -70,7 +83,15 @@ export function HexGallery() {
     <div className="hex-gallery" aria-label="Drawing index" ref={containerRef}>
       <div
         className="hex-grid"
-        style={{ height: `${totalHeight}px`, width: `${cols * hexW + hexW * 0.5}px` }}
+        // Hidden until first measurement commits. Prevents the brief flash
+        // of the SSR default layout in the (rare) case where measured cols
+        // differ — and prevents fall-in animations starting against an
+        // about-to-change grid position.
+        style={{
+          height: `${totalHeight}px`,
+          width: `${cols * hexW + hexW * 0.5}px`,
+          visibility: measured ? 'visible' : 'hidden',
+        }}
       >
         {drawings.map((drawing, i) => {
           const row = Math.floor(i / cols)

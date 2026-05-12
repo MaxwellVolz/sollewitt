@@ -4,7 +4,7 @@ export const wallDrawing237: DrawingInstruction = {
   id: 'wall-drawing-237',
   title: 'Wall Drawing #237',
   description:
-    'The location of a trapezoid. (The trapezoid is located by a written sentence describing its corners geometrically.)',
+    'A trapezoid whose top is half its bottom and whose left side is one and a half times the top, located by an unbroken chain of midpoint constructions between the wall’s corners, side midpoints, and center.',
   year: 1974,
   medium: 'Black pencil and crayon',
   steps: [

@@ -14,7 +14,12 @@ export interface DrawingCanvasHandle {
   getCanvas: () => HTMLCanvasElement | null
 }
 
-function drawStroke(ctx: CanvasRenderingContext2D, stroke: StrokeElement) {
+function drawStroke(ctx: CanvasRenderingContext2D, stroke: StrokeElement | undefined) {
+  // Guard against transient undefined entries during reroll/HMR. The paint
+  // loop reads strokesRef.current at the start of each frame, but if a
+  // module swap or seed change races the loop, drawnCountRef can briefly
+  // index past the new (shorter) array.
+  if (!stroke) return
   const { path, style, text } = stroke
 
   if (text) {
@@ -38,11 +43,14 @@ function drawStroke(ctx: CanvasRenderingContext2D, stroke: StrokeElement) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
-  // Closed path (first == last) → fill as polygon (pegboard squares)
+  // Closed path (first == last) → fill as polygon by default. style.mode
+  // overrides for cases where a closed path should be outlined only.
   const isClosed =
     path.length > 3 &&
     path[0][0] === path[path.length - 1][0] &&
     path[0][1] === path[path.length - 1][1]
+  const mode = style.mode ?? 'auto'
+  const shouldFill = mode === 'fill' || (mode === 'auto' && isClosed)
 
   ctx.beginPath()
   ctx.moveTo(path[0][0], path[0][1])
@@ -50,7 +58,7 @@ function drawStroke(ctx: CanvasRenderingContext2D, stroke: StrokeElement) {
     ctx.lineTo(path[j][0], path[j][1])
   }
 
-  if (isClosed) {
+  if (shouldFill) {
     ctx.fillStyle = style.color
     ctx.fill()
   } else {

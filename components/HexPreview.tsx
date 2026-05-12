@@ -20,6 +20,7 @@ const RENDER_H = Math.round(RENDER_W * (2 / Math.sqrt(3)))
 
 function drawAll(ctx: CanvasRenderingContext2D, strokes: StrokeElement[]) {
   for (const stroke of strokes) {
+    if (!stroke) continue
     const { path, style, text } = stroke
 
     if (text) {
@@ -47,6 +48,8 @@ function drawAll(ctx: CanvasRenderingContext2D, strokes: StrokeElement[]) {
       path.length > 3 &&
       path[0][0] === path[path.length - 1][0] &&
       path[0][1] === path[path.length - 1][1]
+    const mode = style.mode ?? 'auto'
+    const shouldFill = mode === 'fill' || (mode === 'auto' && isClosed)
 
     ctx.beginPath()
     ctx.moveTo(path[0][0], path[0][1])
@@ -54,7 +57,7 @@ function drawAll(ctx: CanvasRenderingContext2D, strokes: StrokeElement[]) {
       ctx.lineTo(path[j][0], path[j][1])
     }
 
-    if (isClosed) {
+    if (shouldFill) {
       ctx.fillStyle = style.color
       ctx.fill()
     } else {
