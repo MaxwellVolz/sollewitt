@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DrawingInstruction, StrokeElement } from '@/types/drawings'
 import { generateStrokes } from '@/lib/engine'
 
@@ -69,6 +69,7 @@ function drawAll(ctx: CanvasRenderingContext2D, strokes: StrokeElement[]) {
 
 export function HexPreview({ instruction, index, style }: HexPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [launching, setLaunching] = useState(false)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -90,8 +91,27 @@ export function HexPreview({ instruction, index, style }: HexPreviewProps) {
   }, [instruction, index])
 
   const handleClick = () => {
-    const target = document.getElementById(instruction.id)
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (launching) return
+
+    // Respect prefers-reduced-motion: skip the lift animation entirely and
+    // jump straight to the target without a smooth scroll glide.
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduceMotion) {
+      document.getElementById(instruction.id)?.scrollIntoView({ behavior: 'auto', block: 'start' })
+      return
+    }
+
+    setLaunching(true)
+    // Wait for the 0.32s transform transition to fully resolve (+40ms
+    // buffer) before kicking off the scroll, so the rise reads as a
+    // discrete motion that completes BEFORE the page glides — not a
+    // half-finished lift overlapping the scroll.
+    window.setTimeout(() => {
+      document.getElementById(instruction.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      window.setTimeout(() => setLaunching(false), 900)
+    }, 360)
   }
 
   const number = instruction.title.replace(/[^0-9]/g, '')
@@ -99,7 +119,7 @@ export function HexPreview({ instruction, index, style }: HexPreviewProps) {
   return (
     <button
       type="button"
-      className="hex-preview"
+      className={`hex-preview${launching ? ' hex-preview--launching' : ''}`}
       onClick={handleClick}
       aria-label={`Jump to ${instruction.title}`}
       style={style}
